@@ -7,6 +7,7 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://placement-demo-mnvk.onrender.com/api/:path*" },
     { "source": "/mailpit", "destination": "https://placement-demo-mnvk.onrender.com/mailpit/" },
+    { "source": "/mailpit/", "destination": "https://placement-demo-mnvk.onrender.com/mailpit/" },
     { "source": "/mailpit/:path*", "destination": "https://placement-demo-mnvk.onrender.com/mailpit/:path*" },
     { "source": "/((?!_next/).*)", "destination": "/index.html" }
   ]
