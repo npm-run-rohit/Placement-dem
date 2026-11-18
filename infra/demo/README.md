@@ -20,7 +20,7 @@ uploaded files and queued jobs from before the sleep are gone (the database stay
 2. **Render**: New > Blueprint, pick this repo, branch `main`. Fill `DATABASE_URL` (Neon),
    `DEMO_PASS_HASH` (`docker run --rm caddy:2.8.4-alpine caddy hash-password --plaintext '<password>'`) and
    `APP_BASE_URL` (the Vercel URL, can be filled after step 3). If Render's URL is not
-   `https://placement-demo.onrender.com`, change the three Render URLs in `vercel.json`.
+   `https://placement-demo-mnvk.onrender.com`, change the three Render URLs in `vercel.json`.
 3. **Vercel**: import this repo, root directory `/` of the repo (where `vercel.json` is), framework Other.
    Add the environment variable `DEMO_BASIC` = base64 of `qa:<password>`. Deploy.
 4. Open the Vercel URL, log in with `qa` and the password. Mailpit is at `<vercel url>/mailpit/` (same login).

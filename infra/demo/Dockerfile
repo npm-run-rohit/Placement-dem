@@ -17,7 +17,10 @@ FROM caddy:2.8.4-alpine AS caddy
 FROM node:20-alpine
 RUN apk add --no-cache redis
 COPY --from=mailpit /mailpit /usr/local/bin/mailpit
-COPY --from=caddy /usr/bin/caddy /usr/local/bin/caddy
+COPY --from=caddy /usr/bin/caddy /tmp/caddy
+# the official binary carries file capabilities (cap_net_bind_service); Render refuses to exec those
+# ("Operation not permitted"). A plain copy drops them; Caddy listens on a high port anyway.
+RUN cp /tmp/caddy /usr/local/bin/caddy && rm /tmp/caddy
 # development keeps the production boot checks off (dev auth + simulators are the point of this demo)
 ENV NODE_ENV=development TZ=Asia/Kolkata LOG_LEVEL=info
 WORKDIR /app
