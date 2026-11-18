@@ -1,0 +1,47 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: placement, POSTGRES_PASSWORD: placement, POSTGRES_DB: placement }
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U placement" --health-interval 5s --health-retries 10
+      redis: # BullMQ queues for the e2e suite (it uses db 15 and flushes it per run)
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://placement:placement@localhost:5432/placement
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run build:contracts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test -w @bimaplacement/api
+      - run: npm run test:e2e # creates its own placement_e2e database
+      - run: npm run migration:run -w @bimaplacement/api
+      - run: npm run seed && npm run seed:fixtures # dev fixtures replay 17 tickets through the services (smoke test)
+      - run: npm run build
+  infra:
+    # CDK assertion tests (no AWS credentials, no Docker: tests use a registry stub image)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/cdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: infra/cdk/package-lock.json }
+      - run: npm ci
+      - run: npm run build
+      - run: npm test

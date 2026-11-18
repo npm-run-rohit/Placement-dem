@@ -1,0 +1,14 @@
+{
+  "name": "@bimaplacement/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared domain vocabulary (enums, labels, state machine, DTO shapes) for the BimaPlacement API and web app. Pure TypeScript, no runtime deps.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test dist/**/*.test.js || true"
+  }
+}

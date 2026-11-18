@@ -1,0 +1,19 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/placement.ts",
+  "watch": { "include": ["**"], "exclude": ["README.md", "cdk*.json", "**/*.d.ts", "**/*.js", "tsconfig.json", "package*.json", "node_modules", "test"] },
+  "context": {
+    "@aws-cdk/core:defaultCrossStackReferences": "strong",
+    "envs": {
+      "prod": {
+        "envName": "prod",
+        "account": "REPLACE_ME",
+        "region": "ap-south-1",
+        "apiDomain": "REPLACE_ME",
+        "appDomain": "REPLACE_ME",
+        "alertEmail": "REPLACE_ME",
+        "multiAz": true,
+        "appEnv": {}
+      }
+    }
+  }
+}

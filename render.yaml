@@ -1,0 +1,33 @@
+# Render Blueprint: hosted QA demo (dev auth + simulators, demo fixtures only). See infra/demo/README.md.
+services:
+  - type: web
+    name: placement-demo
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./infra/demo/Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL # Neon connection string (direct, not -pooler), ends with ?sslmode=require
+        sync: false
+      - key: DEMO_USER
+        value: qa
+      - key: DEMO_PASS_HASH # bcrypt hash of the shared demo password (caddy hash-password)
+        sync: false
+      - key: APP_BASE_URL # the Vercel URL, used in links inside mails
+        sync: false
+      - key: REDIS_URL
+        value: redis://127.0.0.1:6379
+      - key: SMTP_HOST
+        value: 127.0.0.1
+      - key: SMTP_PORT
+        value: '1025'
+      - key: AUTH_MODE
+        value: dev
+      - key: FEATURE_DEV_SIMULATORS
+        value: 'true'
+      - key: TRUST_PROXY
+        value: '2'

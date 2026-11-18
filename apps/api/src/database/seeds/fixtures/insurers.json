@@ -1,0 +1,746 @@
+{
+  "_comment": "DEV FIXTURE - mock insurer master copied from the designer prototype (PL_INSURERS / PL_INSURER_BRANCHES). Not real insurers data, POCs or appetite. Loaded only by npm run seed:fixtures.",
+  "insurers": [
+    {
+      "code": "icici",
+      "name": "ICICI Lombard",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "GTL",
+        "DNO",
+        "CRIME",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL",
+        "PL_ACT"
+      ],
+      "sectors": "Manufacturing, IT/ITES, Logistics",
+      "note": "Requires 3-year claims history above ₹5 Cr SI.",
+      "branches": [
+        {
+          "name": "Mumbai - Corporate",
+          "city": "Mumbai",
+          "pocs": [
+            {
+              "name": "Rahul Sharma",
+              "email": "rahul.sharma@icici.insurer.example.test"
+            },
+            {
+              "name": "Neha Kulkarni",
+              "email": "neha.kulkarni@icici.insurer.example.test"
+            },
+            {
+              "name": "Anand Iyer",
+              "email": "anand.iyer@icici.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "hdfc",
+      "name": "HDFC ERGO",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "GTL",
+        "DNO",
+        "CRIME",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL",
+        "PL_ACT",
+        "PI_ENGG",
+        "PI_TECH"
+      ],
+      "sectors": "Services, Healthcare, Hospitality",
+      "note": "Strong on GMC for headcount 200–2000.",
+      "branches": [
+        {
+          "name": "Pune - Commercial Lines",
+          "city": "Pune",
+          "pocs": [
+            {
+              "name": "Ankit Sabharwal",
+              "email": "ankit.sabharwal@hdfc.insurer.example.test"
+            },
+            {
+              "name": "Divya Rane",
+              "email": "divya.rane@hdfc.insurer.example.test"
+            },
+            {
+              "name": "Vivek Nair",
+              "email": "vivek.nair@hdfc.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "bajaj",
+      "name": "Bajaj Allianz",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "DNO",
+        "CRIME",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL"
+      ],
+      "sectors": "IT/ITES, Pharma, Infrastructure",
+      "note": "D&O limits above ₹25 Cr referred to reinsurer.",
+      "branches": [
+        {
+          "name": "Pune - EB Desk",
+          "city": "Pune",
+          "pocs": [
+            {
+              "name": "Kartik Bhamre",
+              "email": "kartik.bhamre@bajaj.insurer.example.test"
+            },
+            {
+              "name": "Sana Qureshi",
+              "email": "sana.qureshi@bajaj.insurer.example.test"
+            },
+            {
+              "name": "Amit Deshpande",
+              "email": "amit.deshpande@bajaj.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "tata",
+      "name": "Tata AIG",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "DNO",
+        "CRIME",
+        "PI_ENGG",
+        "PI_TECH",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL",
+        "PL_ACT"
+      ],
+      "sectors": "IT/ITES, Financial services, Exports",
+      "note": "Preferred market for D&O on unlisted companies.",
+      "branches": [
+        {
+          "name": "Mumbai - Specialty",
+          "city": "Mumbai",
+          "pocs": [
+            {
+              "name": "Gautam Vyas",
+              "email": "gautam.vyas@tata.insurer.example.test"
+            },
+            {
+              "name": "Reema Fernandes",
+              "email": "reema.fernandes@tata.insurer.example.test"
+            },
+            {
+              "name": "Sonal Batra",
+              "email": "sonal.batra@tata.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "nia",
+      "name": "New India Assurance",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL",
+        "PL_ACT",
+        "WC"
+      ],
+      "sectors": "Infrastructure, Manufacturing, PSU",
+      "note": "Writes large property and marine risks.",
+      "branches": [
+        {
+          "name": "Mumbai - DO 1",
+          "city": "Mumbai",
+          "pocs": [
+            {
+              "name": "Sridhar Rao",
+              "email": "sridhar.rao@nia.insurer.example.test"
+            },
+            {
+              "name": "P. Lakshmi",
+              "email": "p.lakshmi@nia.insurer.example.test"
+            },
+            {
+              "name": "M. Venkatesh",
+              "email": "m.venkatesh@nia.insurer.example.test"
+            }
+          ]
+        },
+        {
+          "name": "Bengaluru Corporate",
+          "city": "Bengaluru",
+          "pocs": [
+            {
+              "name": "Sridhar Rao",
+              "email": "sridhar.rao@nia.insurer.example.test"
+            },
+            {
+              "name": "P. Lakshmi",
+              "email": "p.lakshmi@nia.insurer.example.test"
+            },
+            {
+              "name": "M. Venkatesh",
+              "email": "m.venkatesh@nia.insurer.example.test"
+            }
+          ]
+        },
+        {
+          "name": "Bandra Corporate",
+          "city": "Bandra",
+          "pocs": [
+            {
+              "name": "Sridhar Rao",
+              "email": "sridhar.rao@nia.insurer.example.test"
+            },
+            {
+              "name": "P. Lakshmi",
+              "email": "p.lakshmi@nia.insurer.example.test"
+            },
+            {
+              "name": "M. Venkatesh",
+              "email": "m.venkatesh@nia.insurer.example.test"
+            }
+          ]
+        },
+        {
+          "name": "Chennai RO",
+          "city": "Chennai",
+          "pocs": [
+            {
+              "name": "Sridhar Rao",
+              "email": "sridhar.rao@nia.insurer.example.test"
+            },
+            {
+              "name": "P. Lakshmi",
+              "email": "p.lakshmi@nia.insurer.example.test"
+            },
+            {
+              "name": "M. Venkatesh",
+              "email": "m.venkatesh@nia.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "digit",
+      "name": "Go Digit",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "GTL",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR"
+      ],
+      "sectors": "Startups, Retail, Logistics",
+      "note": "Accepts a census without age bands at proposal stage.",
+      "branches": [
+        {
+          "name": "Bengaluru - SME",
+          "city": "Bengaluru",
+          "pocs": [
+            {
+              "name": "Aisha Khan",
+              "email": "aisha.khan@digit.insurer.example.test"
+            },
+            {
+              "name": "Rohan Pai",
+              "email": "rohan.pai@digit.insurer.example.test"
+            },
+            {
+              "name": "Naveen Shetty",
+              "email": "naveen.shetty@digit.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "sbi",
+      "name": "SBI General",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL",
+        "PL_ACT"
+      ],
+      "sectors": "Manufacturing, BFSI, Retail",
+      "note": "Declines standalone Marine below ₹2 Cr annual sendings.",
+      "branches": [
+        {
+          "name": "Mumbai - Corporate",
+          "city": "Mumbai",
+          "pocs": [
+            {
+              "name": "Deepak Mishra",
+              "email": "deepak.mishra@sbi.insurer.example.test"
+            },
+            {
+              "name": "R. Krishnan",
+              "email": "r.krishnan@sbi.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "chola",
+      "name": "Cholamandalam MS",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "WC",
+        "CGL"
+      ],
+      "sectors": "Auto components, Logistics, SME",
+      "note": "Good SME appetite; limited liability capacity.",
+      "branches": [
+        {
+          "name": "Chennai - Commercial",
+          "city": "Chennai",
+          "pocs": [
+            {
+              "name": "Vignesh Kumar",
+              "email": "vignesh.kumar@chola.insurer.example.test"
+            },
+            {
+              "name": "S. Prabhu",
+              "email": "s.prabhu@chola.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "reliance",
+      "name": "Reliance General",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "GTL",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL",
+        "PL_ACT"
+      ],
+      "sectors": "Manufacturing, Textiles, Retail",
+      "note": "",
+      "branches": [
+        {
+          "name": "Mumbai - Corporate",
+          "city": "Mumbai",
+          "pocs": [
+            {
+              "name": "Farhan Merchant",
+              "email": "farhan.merchant@reliance.insurer.example.test"
+            },
+            {
+              "name": "Ketan Joshi",
+              "email": "ketan.joshi@reliance.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "liberty",
+      "name": "Liberty General",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "DNO",
+        "CRIME",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL",
+        "PL_ACT",
+        "PI_ENGG",
+        "PI_TECH"
+      ],
+      "sectors": "Exports, Engineering, Services",
+      "note": "",
+      "branches": [
+        {
+          "name": "Mumbai - Liability",
+          "city": "Mumbai",
+          "pocs": [
+            {
+              "name": "Nikhil Advani",
+              "email": "nikhil.advani@liberty.insurer.example.test"
+            },
+            {
+              "name": "Preeti Malhotra",
+              "email": "preeti.malhotra@liberty.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "care",
+      "name": "Care Health",
+      "status": "Active",
+      "appetite": ["GMC", "GPA"],
+      "sectors": "Services, IT/ITES, Retail",
+      "note": "Health-only market. No maternity below 50 lives.",
+      "branches": [
+        {
+          "name": "Delhi - Group Health",
+          "city": "Delhi",
+          "pocs": [
+            {
+              "name": "Ritu Bansal",
+              "email": "ritu.bansal@care.insurer.example.test"
+            },
+            {
+              "name": "Harsh Vardhan",
+              "email": "harsh.vardhan@care.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "star",
+      "name": "Star Health",
+      "status": "Active",
+      "appetite": ["GMC", "GPA"],
+      "sectors": "SME, Retail, Healthcare",
+      "note": "Health-only market.",
+      "branches": [
+        {
+          "name": "Chennai - Group Health",
+          "city": "Chennai",
+          "pocs": [
+            {
+              "name": "Lakshmi Narayanan",
+              "email": "lakshmi.narayanan@star.insurer.example.test"
+            },
+            {
+              "name": "K. Sundaram",
+              "email": "k.sundaram@star.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "sompo",
+      "name": "Universal Sompo",
+      "status": "Active",
+      "appetite": [
+        "GMC",
+        "GPA",
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "WC"
+      ],
+      "sectors": "Manufacturing, Logistics",
+      "note": "",
+      "branches": [
+        {
+          "name": "Mumbai - Property",
+          "city": "Mumbai",
+          "pocs": [
+            {
+              "name": "Manish Tandon",
+              "email": "manish.tandon@sompo.insurer.example.test"
+            },
+            {
+              "name": "Alok Ranjan",
+              "email": "alok.ranjan@sompo.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "oriental",
+      "name": "Oriental Insurance",
+      "status": "Do Not Float",
+      "appetite": [
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL",
+        "PL_ACT",
+        "WC"
+      ],
+      "sectors": "PSU, Heavy engineering",
+      "note": "Commercial lines only for this segment.",
+      "branches": [
+        {
+          "name": "Delhi - RO 2",
+          "city": "Delhi",
+          "pocs": [
+            {
+              "name": "B. K. Saxena",
+              "email": "b.k.saxena@oriental.insurer.example.test"
+            },
+            {
+              "name": "R. P. Gupta",
+              "email": "r.p.gupta@oriental.insurer.example.test"
+            }
+          ]
+        },
+        {
+          "name": "Koramangala Branch",
+          "city": "Koramangala",
+          "pocs": [
+            {
+              "name": "B. K. Saxena",
+              "email": "b.k.saxena@oriental.insurer.example.test"
+            },
+            {
+              "name": "R. P. Gupta",
+              "email": "r.p.gupta@oriental.insurer.example.test"
+            }
+          ]
+        },
+        {
+          "name": "Indore Branch",
+          "city": "Indore",
+          "pocs": [
+            {
+              "name": "B. K. Saxena",
+              "email": "b.k.saxena@oriental.insurer.example.test"
+            },
+            {
+              "name": "R. P. Gupta",
+              "email": "r.p.gupta@oriental.insurer.example.test"
+            }
+          ]
+        },
+        {
+          "name": "Ahmedabad Branch",
+          "city": "Ahmedabad",
+          "pocs": [
+            {
+              "name": "B. K. Saxena",
+              "email": "b.k.saxena@oriental.insurer.example.test"
+            },
+            {
+              "name": "R. P. Gupta",
+              "email": "r.p.gupta@oriental.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "code": "united",
+      "name": "United India Insurance",
+      "status": "Active",
+      "appetite": [
+        "FIRE_FACTORY",
+        "FIRE_GODOWN",
+        "IAR",
+        "BURGLARY",
+        "MBD_EEP",
+        "CAR",
+        "EAR",
+        "BGR",
+        "MARINE_OPEN",
+        "MARINE_STOP",
+        "CGL",
+        "PL_ACT",
+        "WC",
+        "GPA"
+      ],
+      "sectors": "PSU, Manufacturing, Cooperatives",
+      "note": "Preferred market for PSU-linked SMEs; branch routing decides the desk.",
+      "branches": [
+        {
+          "name": "Chennai - RO",
+          "city": "Chennai",
+          "pocs": [
+            {
+              "name": "P. Ravi Kumar",
+              "email": "p.ravi.kumar@united.insurer.example.test"
+            },
+            {
+              "name": "Anitha Rajan",
+              "email": "anitha.rajan@united.insurer.example.test"
+            },
+            {
+              "name": "T. S. Narayanan",
+              "email": "t.s.narayanan@united.insurer.example.test"
+            }
+          ]
+        },
+        {
+          "name": "Koramangala Branch",
+          "city": "Koramangala",
+          "pocs": [
+            {
+              "name": "P. Ravi Kumar",
+              "email": "p.ravi.kumar@united.insurer.example.test"
+            },
+            {
+              "name": "Anitha Rajan",
+              "email": "anitha.rajan@united.insurer.example.test"
+            },
+            {
+              "name": "T. S. Narayanan",
+              "email": "t.s.narayanan@united.insurer.example.test"
+            }
+          ]
+        },
+        {
+          "name": "Mysuru Branch",
+          "city": "Mysuru",
+          "pocs": [
+            {
+              "name": "P. Ravi Kumar",
+              "email": "p.ravi.kumar@united.insurer.example.test"
+            },
+            {
+              "name": "Anitha Rajan",
+              "email": "anitha.rajan@united.insurer.example.test"
+            },
+            {
+              "name": "T. S. Narayanan",
+              "email": "t.s.narayanan@united.insurer.example.test"
+            }
+          ]
+        },
+        {
+          "name": "Hyderabad Branch",
+          "city": "Hyderabad",
+          "pocs": [
+            {
+              "name": "P. Ravi Kumar",
+              "email": "p.ravi.kumar@united.insurer.example.test"
+            },
+            {
+              "name": "Anitha Rajan",
+              "email": "anitha.rajan@united.insurer.example.test"
+            },
+            {
+              "name": "T. S. Narayanan",
+              "email": "t.s.narayanan@united.insurer.example.test"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

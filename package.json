@@ -1,0 +1,42 @@
+{
+  "name": "bimaplacement",
+  "private": true,
+  "version": "0.1.0",
+  "description": "BimaPlacement - Placement Automation Platform (RFQ -> insurer threads -> quotes -> QCR) for BimaKavach, part of the BimaSahayak suite",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "npm run build -w @bimaplacement/contracts && npm run build -w @bimaplacement/api && npm run build -w @bimaplacement/web",
+    "build:contracts": "npm run build -w @bimaplacement/contracts",
+    "dev:api": "npm run start:dev -w @bimaplacement/api",
+    "dev:worker": "npm run start:worker:dev -w @bimaplacement/api",
+    "dev:web": "npm run dev -w @bimaplacement/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.ts\" \"infra/cdk/{bin,lib,test}/**/*.ts\" \"*.mjs\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs}\" \"packages/**/*.ts\" \"infra/cdk/{bin,lib,test}/**/*.ts\" \"*.mjs\"",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e -w @bimaplacement/api",
+    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "migration:generate": "npm run migration:generate -w @bimaplacement/api",
+    "migration:run": "npm run migration:run -w @bimaplacement/api",
+    "seed": "npm run seed -w @bimaplacement/api",
+    "seed:fixtures": "npm run seed:fixtures -w @bimaplacement/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0",
+    "prettier": "^3.3.3",
+    "typescript": "~5.6.3",
+    "typescript-eslint": "^8.72.1"
+  }
+}

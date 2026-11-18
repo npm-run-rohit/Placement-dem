@@ -1,0 +1,33 @@
+{
+  "name": "@bimaplacement/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BimaPlacement web app (Placement Workbench) - React + Next.js (Turbopack) + TypeScript + Tailwind, mounted in the BimaSahayak shell",
+  "scripts": {
+    "dev": "next dev --turbopack -p 5173",
+    "build": "tsc -p tsconfig.json && next build --turbopack",
+    "build:demo": "cross-env NEXT_PUBLIC_DEMO=true next build --turbopack",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "echo \"(add vitest)\""
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.62.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
+    "next": "~16.3.8",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.4.20",
+    "cross-env": "^7.0.3",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "~5.6.3"
+  }
+}

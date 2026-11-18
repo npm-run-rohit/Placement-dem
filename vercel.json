@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --ignore-scripts",
+  "buildCommand": "npm run build:contracts && NEXT_PUBLIC_DEV_TOOLS=true npm run build -w @bimaplacement/web",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://placement-demo.onrender.com/api/:path*" },
+    { "source": "/mailpit", "destination": "https://placement-demo.onrender.com/mailpit/" },
+    { "source": "/mailpit/:path*", "destination": "https://placement-demo.onrender.com/mailpit/:path*" },
+    { "source": "/((?!_next/).*)", "destination": "/index.html" }
+  ]
+}

@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-demo
+.next
+coverage
+packages/contracts/lib
+apps/web/next-env.d.ts
+*.md
+package-lock.json

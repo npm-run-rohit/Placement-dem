@@ -1,0 +1,2 @@
+*.sh text eol=lf
+infra/demo/Caddyfile text eol=lf

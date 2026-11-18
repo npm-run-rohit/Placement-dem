@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply bg-placement-bg font-sans text-ink antialiased; }
+  .num { font-variant-numeric: tabular-nums; }
+}
+
+/* Ikkat brand motif (UI-SPEC 1.7) - page rule, audit trail divider, bullet */
+@layer components {
+  .bk-rule { height: 4px; width: 100%; background-color: #4100CF; -webkit-mask: url('/brand/ikkat-rule.svg') repeat-x left center / auto 4px; mask: url('/brand/ikkat-rule.svg') repeat-x left center / auto 4px; }
+  .bk-trail { height: 2px; width: 100%; background-color: #D2D5D8; -webkit-mask: url('/brand/ikkat-trail.svg') repeat-x left center / 16px 2px; mask: url('/brand/ikkat-trail.svg') repeat-x left center / 16px 2px; }
+  .bk-mark { width: 12px; height: 6px; background-color: #FF7700; -webkit-mask: url('/brand/ikkat-mark.svg') no-repeat center / contain; mask: url('/brand/ikkat-mark.svg') no-repeat center / contain; }
+  .focus-ring { @apply focus-visible:outline-none focus-visible:border-brand focus-visible:shadow-focus; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
