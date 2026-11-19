@@ -28,7 +28,7 @@ COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/packages/contracts ./node_modules/@bimaplacement/contracts
 COPY --from=build /repo/apps/api/dist ./dist
 COPY --from=build /repo/apps/api/package.json ./
-COPY --chmod=755 infra/demo/Caddyfile infra/demo/start.sh ./
+COPY --chmod=755 infra/demo/Caddyfile infra/demo/start.sh infra/demo/demo-db.js ./
 # only uploads and Mailpit's data need to be writable by node
 RUN mkdir -p uploads && chown node:node /app /app/uploads
 USER node
