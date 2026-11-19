@@ -141,6 +141,27 @@ const fmtEngine = (iso: string) =>
     .formatToParts(new Date(iso))
     .reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {} as Record<string, string>);
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * After "Reset demo data": wait until the restarted API answers (true), or give up after 5 minutes (false).
+ * Plain loop, not tied to a component's lifecycle; each probe times out so one stuck request cannot stall it.
+ */
+async function waitForDemo(): Promise<boolean> {
+  await sleep(10_000); // the supervisor stops the old API first; an earlier answer would be the old one
+  const giveUpAt = Date.now() + 5 * 60_000;
+  while (Date.now() < giveUpAt) {
+    try {
+      await api('/dev/clock', { signal: AbortSignal.timeout(8000) });
+      return true;
+    } catch {
+      /* still resetting */
+    }
+    await sleep(3000);
+  }
+  return false;
+}
+
 /** PlEngineChip: engine time (API clock) with business-time steps; each step runs the SLA sweep. */
 function EngineChip({ onHide, onError }: { onHide: () => void; onError: (e: unknown) => void }) {
   const [open, setOpen] = useState(false);
@@ -158,37 +179,14 @@ function EngineChip({ onHide, onError }: { onHide: () => void; onError: (e: unkn
     onSuccess: () => {
       setOpen(false);
       setResetting(true);
+      void waitForDemo().then((back) => {
+        if (back) return window.location.assign('/');
+        setResetting(false);
+        onError(new Error('The demo did not come back after 5 minutes. Reload the page.'));
+      });
     },
     onError,
   });
-  useEffect(() => {
-    if (!resetting) return;
-    let stopped = false;
-    const started = Date.now();
-    const poll = async () => {
-      if (stopped) return;
-      // give the supervisor time to stop the old API before treating an answer as "back"
-      if (Date.now() - started > 10_000) {
-        try {
-          await api('/dev/clock');
-          window.location.assign('/');
-          return;
-        } catch {
-          /* still resetting */
-        }
-      }
-      if (Date.now() - started > 5 * 60_000) {
-        setResetting(false);
-        onError(new Error('The demo did not come back after 5 minutes. Reload the page.'));
-        return;
-      }
-      setTimeout(poll, 3000);
-    };
-    void poll();
-    return () => {
-      stopped = true;
-    };
-  }, [resetting]); // eslint-disable-line react-hooks/exhaustive-deps -- onError changes identity every render; polling must not restart
   const move = useMutation({
     mutationFn: (body: { businessMinutes?: number } | 'reset') =>
       body === 'reset'
