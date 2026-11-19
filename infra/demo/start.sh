@@ -1,30 +1,58 @@
 #!/bin/sh
-# Starts the QA demo container: Redis, Mailpit, migrations + seed (+ fixtures on an empty DB), API, worker, Caddy.
+# Starts the QA demo container: Redis, Mailpit, fresh database (wiped, migrated, seeded, fixtures), API, worker,
+# Caddy. Every start (Render wakes the free instance on the first visit after 15 idle minutes, and on each deploy)
+# begins from clean demo data. "Reset demo data" in the dev tools menu does the same while running: the API
+# writes $DEMO_RESET_FILE and the loop at the bottom restarts API + worker on a fresh database.
 set -e
 : "${DATABASE_URL:?DATABASE_URL is required (Neon connection string)}"
 : "${DEMO_USER:?DEMO_USER is required}"
 : "${DEMO_PASS_HASH:?DEMO_PASS_HASH (bcrypt) is required}"
+export DEMO_RESET_FILE=/tmp/demo-reset
+rm -f "$DEMO_RESET_FILE"
 
 # queue only; nothing to keep across restarts. noeviction as BullMQ requires
 redis-server --bind 127.0.0.1 --save '' --appendonly no --maxmemory 48mb --maxmemory-policy noeviction --daemonize yes
 
 mailpit --listen 127.0.0.1:8025 --smtp 127.0.0.1:1025 --webroot /mailpit/ --max 1000 --quiet &
 
-npm run db:deploy
-
-TICKETS=$(node -e "
+fresh_data() {
+  echo "Demo: wiping the database and loading fixtures"
+  node -e "
 const { Client } = require('pg');
 const c = new Client({ connectionString: process.env.DATABASE_URL });
-c.connect().then(() => c.query('select count(*)::int as n from placement_tickets')).then((r) => { console.log(r.rows[0].n); return c.end(); })
+c.connect().then(() => c.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')).then(() => c.end())
   .catch((e) => { console.error(e.message); process.exit(1); });
-")
-if [ "$TICKETS" = "0" ]; then
-  echo "Empty database: loading the demo fixtures"
+"
+  redis-cli flushall > /dev/null
+  node -e "fetch('http://127.0.0.1:8025/mailpit/api/v1/messages', { method: 'DELETE' }).catch(() => {})"
+  npm run db:deploy
   node dist/database/seeds/seed-fixtures.js
-fi
+}
+
+start_apps() {
+  PORT=4000 node --max-old-space-size=160 dist/main.js &
+  API_PID=$!
+  node --max-old-space-size=160 dist/worker.js &
+  WORKER_PID=$!
+}
+
+fresh_data
+start_apps
 
 # Render sets PORT for the public listener (Caddy); the API stays on 4000 behind it
-export CADDY_PORT="${PORT:-10000}" PORT=4000
-node --max-old-space-size=160 dist/main.js &
-node --max-old-space-size=160 dist/worker.js &
-exec caddy run --config /app/Caddyfile --adapter caddyfile
+CADDY_PORT="${PORT:-10000}" caddy run --config /app/Caddyfile --adapter caddyfile &
+CADDY_PID=$!
+
+set +e
+while kill -0 "$CADDY_PID" 2>/dev/null; do
+  if [ -f "$DEMO_RESET_FILE" ]; then
+    rm -f "$DEMO_RESET_FILE"
+    sleep 1 # let the API answer the reset request
+    kill "$API_PID" "$WORKER_PID" 2>/dev/null
+    wait "$API_PID" "$WORKER_PID" 2>/dev/null
+    if fresh_data; then echo "Demo: reset done"; else echo "Demo: reset FAILED"; fi
+    start_apps
+  fi
+  sleep 2
+done
+wait "$CADDY_PID"

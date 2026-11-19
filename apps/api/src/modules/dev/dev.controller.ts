@@ -17,6 +17,7 @@ import { SlaSweeperHandler } from '../automation/sla-sweeper.handler';
 import { InboundMailService } from '../inbound-mail/inbound-mail.service';
 import { DecisionsService } from '../decisions/decisions.service';
 import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
 import { signEmailLayer, type DeliveryPayload } from '../../integrations/email-layer/contract';
 import { EmailLayerWebhookController } from '../../integrations/email-layer/email-layer-webhook.controller';
 import { DevSimulatorService, type InsurerSimKind } from './dev-simulator.service';
@@ -28,6 +29,7 @@ import type { FloatPreset } from './float-presets';
  *  - GET  /dev/clock                                -> engine time (PlEngineChip)
  *  - POST /dev/clock/advance        {minutes} | {businessMinutes} -> move engine time, then run the SLA sweep
  *  - POST /dev/clock/reset                          -> back to real time
+ *  - POST /dev/demo/reset                           -> hosted QA demo: wipe the DB and reload fixtures (DEMO_RESET_FILE)
  *  - POST /dev/mail/inbound          InboundMailRaw  -> as if the insurer/RM replied
  *  - POST /dev/tickets/:id/revision  {by, reason, asks} -> as if BimaSetu sent a revision_request
  *  - POST /dev/tickets/:id/email-layer/deliver {threadId, kind} -> a signed email layer delivery through the real webhook handler
@@ -88,7 +90,24 @@ export class DevController {
 
   private engine() {
     const now = this.clock.now();
-    return { now: now.toISOString(), offsetMins: Math.round((now.getTime() - Date.now()) / 60_000) };
+    return {
+      now: now.toISOString(),
+      offsetMins: Math.round((now.getTime() - Date.now()) / 60_000),
+      demoReset: !!process.env.DEMO_RESET_FILE,
+    };
+  }
+
+  /**
+   * Hosted QA demo only (DEMO_RESET_FILE is set by infra/demo/start.sh): asks the container's supervisor to wipe
+   * the database and reload the fixtures. The supervisor then restarts this process, so the answer comes first.
+   */
+  @Post('demo/reset')
+  demoReset() {
+    this.guard();
+    const flag = process.env.DEMO_RESET_FILE;
+    if (!flag) throw DomainError.guard('Demo reset is only available on the hosted demo');
+    writeFileSync(flag, new Date().toISOString());
+    return { resetting: true };
   }
 
   /**

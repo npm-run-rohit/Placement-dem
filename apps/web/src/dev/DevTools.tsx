@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Clock, EyeOff, RotateCcw, Zap } from 'lucide-react';
+import { AlertTriangle, Clock, Database, EyeOff, RotateCcw, Zap } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { api } from '@/lib/api-client';
 
@@ -147,9 +147,48 @@ function EngineChip({ onHide, onError }: { onHide: () => void; onError: (e: unkn
   const qc = useQueryClient();
   const engine = useQuery({
     queryKey: ['dev', 'clock'],
-    queryFn: () => api<{ now: string; offsetMins: number }>('/dev/clock'),
+    queryFn: () => api<{ now: string; offsetMins: number; demoReset?: boolean }>('/dev/clock'),
     refetchInterval: 60_000,
   });
+  // hosted QA demo: wipe and reload the fixtures (two clicks), then wait for the API to come back and reload
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const demoReset = useMutation({
+    mutationFn: () => api('/dev/demo/reset', { method: 'POST', json: {} }),
+    onSuccess: () => {
+      setOpen(false);
+      setResetting(true);
+    },
+    onError,
+  });
+  useEffect(() => {
+    if (!resetting) return;
+    let stopped = false;
+    const started = Date.now();
+    const poll = async () => {
+      if (stopped) return;
+      // give the supervisor time to stop the old API before treating an answer as "back"
+      if (Date.now() - started > 10_000) {
+        try {
+          await api('/dev/clock');
+          window.location.assign('/');
+          return;
+        } catch {
+          /* still resetting */
+        }
+      }
+      if (Date.now() - started > 5 * 60_000) {
+        setResetting(false);
+        onError(new Error('The demo did not come back after 5 minutes. Reload the page.'));
+        return;
+      }
+      setTimeout(poll, 3000);
+    };
+    void poll();
+    return () => {
+      stopped = true;
+    };
+  }, [resetting]); // eslint-disable-line react-hooks/exhaustive-deps -- onError changes identity every render; polling must not restart
   const move = useMutation({
     mutationFn: (body: { businessMinutes?: number } | 'reset') =>
       body === 'reset'
@@ -161,6 +200,14 @@ function EngineChip({ onHide, onError }: { onHide: () => void; onError: (e: unkn
     },
     onError,
   });
+  if (resetting)
+    return (
+      <div className="fixed inset-0 z-[102] flex items-center justify-center bg-black/30">
+        <div role="status" className="rounded-xl bg-white px-5 py-4 text-sm text-ink shadow-popover">
+          Resetting demo data. The app reloads in about a minute.
+        </div>
+      </div>
+    );
   if (engine.isError) return null; // API without dev simulators (FEATURE_DEV_SIMULATORS=false)
   const p = engine.data ? fmtEngine(engine.data.now) : null;
 
@@ -185,6 +232,16 @@ function EngineChip({ onHide, onError }: { onHide: () => void; onError: (e: unkn
           >
             <RotateCcw size={12} /> Back to real time
           </button>
+          {engine.data?.demoReset && (
+            <button
+              onClick={() => (confirmReset ? demoReset.mutate() : setConfirmReset(true))}
+              onMouseLeave={() => setConfirmReset(false)}
+              disabled={demoReset.isPending}
+              className="flex w-full items-center gap-1.5 border-b border-line-subtle px-3 py-2 text-left text-xs text-t-red hover:bg-canvas"
+            >
+              <Database size={12} /> {confirmReset ? 'Click again to wipe all data' : 'Reset demo data'}
+            </button>
+          )}
           <button
             onClick={() => {
               setOpen(false);

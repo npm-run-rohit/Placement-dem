@@ -8,7 +8,7 @@ production is `infra/cdk`.
 | --- | --- | --- |
 | Web app | Vercel (`vercel.json`, `middleware.js`) | Static build with `NEXT_PUBLIC_DEV_TOOLS=true`; `/api` and `/mailpit` rewrite to Render; basic auth |
 | API + worker + Redis + Mailpit | Render free web service (`render.yaml`, `infra/demo/Dockerfile`) | One container, Caddy in front (basic auth, `/mailpit` to Mailpit, rest to the API) |
-| Postgres | Neon free | Migrations + PRD seed run on every start; fixtures load once on an empty DB |
+| Postgres | Neon free | Wiped and reloaded (migrations, PRD seed, fixtures) on every start, i.e. each wake from sleep; "Reset demo data" in the dev tools menu does the same on demand |
 
 Render's free tier sleeps after 15 minutes idle. The first request then takes about a minute, and Mailpit mail,
 uploaded files and queued jobs from before the sleep are gone (the database stays).
