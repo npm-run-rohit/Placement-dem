@@ -59,6 +59,16 @@ export const NOTIFICATION_RULES: Record<string, NotificationRule> = {
     title: 'Revision requested - {{TicketID}}',
     body: 'A revision was requested on {{TicketID}} ({{Client}}). No insurer is contacted until you act.',
   },
+  'mail.mailbox_not_connected': {
+    to: ['owner'],
+    title: 'Connect your Gmail to send insurer mail',
+    body: 'A mail on {{TicketID}} ({{Client}}) was not sent: your Gmail is not connected. Connect it, then open the Mail Trail and press Resend on the failed mail.',
+  },
+  'mail.send_rejected': {
+    to: ['owner'],
+    title: 'A mail was refused - {{TicketID}}',
+    body: 'A mail on {{TicketID}} ({{Client}}) was refused by Gmail (for example a wrong address). Fix the cause, then open the Mail Trail and press Resend on the failed mail.',
+  },
   'rfq.v2_created': {
     to: ['owner'],
     title: 'RFQ V2 created - {{TicketID}}',
@@ -78,7 +88,9 @@ export function linkFor(eventType: string, ticketNo: string): string {
         ? 'threads'
         : eventType.startsWith('rfq.')
           ? 'rfq'
-          : '';
+          : eventType.startsWith('mail.')
+            ? 'mail'
+            : '';
   return `/tickets/${ticketNo}${tab ? `/${tab}` : ''}`;
 }
 

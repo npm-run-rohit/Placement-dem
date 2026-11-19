@@ -23,6 +23,6 @@ import { RateLimiter } from '../../common/rate-limit/rate-limiter';
     RateLimiter,
   ],
   controllers: [BimaSetuWebhookController],
-  exports: [BimaSetuClient, BimaSetuFloatService, BimaSetuInboundHandler, TypeOrmModule],
+  exports: [BimaSetuClient, BimaSetuFloatService, BimaSetuInboundHandler, RateLimiter, TypeOrmModule],
 })
 export class BimaSetuModule {}

@@ -4,6 +4,11 @@ import { MailDirection, PRODUCT_TYPES_SEED } from '@bimaplacement/contracts';
 import { QueueHandler } from '../../infrastructure/messaging/queue-handler.decorator';
 import { QUEUES } from '../../infrastructure/messaging/queues';
 import type { JobHandler } from '../../infrastructure/messaging/messaging.ports';
+import { OutboxService } from '../../infrastructure/outbox/outbox.service';
+import {
+  MailboxNotConnectedError,
+  MailRejectedError,
+} from '../../infrastructure/mail/email-layer-mailbox.adapter';
 import { MAILBOX, type MailboxConnector } from '../../infrastructure/mail/mailbox.port';
 import { SlaConfigService } from '../sla/sla-config.service';
 import { PlacementTicket } from '../tickets/entities/placement-ticket.entity';
@@ -17,6 +22,7 @@ import { QcrVersion } from '../qcr/entities/qcr-version.entity';
 import { MandateRequest } from '../mandates/entities/mandate-request.entity';
 import { CommunicationTemplate } from '../masters/entities/communication-template.entity';
 import { MailMessage } from './entities/mail-message.entity';
+import { conversationRefFor } from './conversation-ref';
 import { insurerSubjectRef, renderTemplate } from './template-renderer';
 
 type Job = {
@@ -70,6 +76,7 @@ export class MailOutboundHandler implements JobHandler {
     @Inject(MAILBOX) private readonly mailbox: MailboxConnector,
     private readonly ds: DataSource,
     private readonly sla: SlaConfigService,
+    private readonly outbox: OutboxService,
   ) {}
 
   async handle(jobName: string, data: unknown): Promise<void> {
@@ -89,23 +96,17 @@ export class MailOutboundHandler implements JobHandler {
       return;
     }
     const fromMailbox = pm.mailboxAddress ?? pm.email;
-    const sent = await this.mailbox.send({
-      fromMailbox,
-      to: draft.to,
-      subject: draft.subject,
-      html: html(draft.body),
-      text: draft.body,
-      attachments: draft.attachments.map((d) => ({
-        fileName: d.fileName,
-        contentType: d.contentType,
-        storageKey: d.storageKey,
-      })),
-      headers: {
-        'X-Placement-Ticket': ticket.ticketNo,
-        ...(draft.threadId ? { 'X-Placement-Thread': draft.threadId } : {}),
-      },
-    });
-    await mails.insert({
+    const threadRef = draft.threadId
+      ? (await this.ds.getRepository(InsurerThread).findOneByOrFail({ id: draft.threadId })).threadRef
+      : null;
+    const conversationRef = conversationRefFor(ticket.ticketNo, threadRef);
+    // Chain onto the latest sent mail of this conversation (any mailbox; the layer keys on the first email).
+    const previous = await mails
+      .createQueryBuilder('m')
+      .where('m.conversationRef = :conversationRef AND m.providerMessageId IS NOT NULL', { conversationRef })
+      .orderBy('m.at', 'DESC')
+      .getOne();
+    const record = {
       ticketId: ticket.id,
       threadId: draft.threadId,
       direction: MailDirection.OUTBOUND,
@@ -118,9 +119,57 @@ export class MailOutboundHandler implements JobHandler {
       attachmentDocumentIds: draft.attachments.map((d) => d.id),
       rfqLinkInBody: draft.rfqLinkInBody,
       outboxId: job.outboxId,
-      providerMessageId: sent.providerMessageId,
-      status: 'sent',
+      conversationRef,
       ...(job.occurredAt ? { at: new Date(job.occurredAt) } : {}),
+    };
+    let sent: { providerMessageId: string; providerThreadId?: string };
+    try {
+      sent = await this.mailbox.send({
+        fromMailbox,
+        to: draft.to,
+        subject: draft.subject,
+        html: html(draft.body),
+        text: draft.body,
+        attachments: draft.attachments.map((d) => ({
+          fileName: d.fileName,
+          contentType: d.contentType,
+          storageKey: d.storageKey,
+        })),
+        headers: {
+          'X-Placement-Ticket': ticket.ticketNo,
+          ...(draft.threadId ? { 'X-Placement-Thread': draft.threadId } : {}),
+        },
+        conversation: {
+          ref: conversationRef,
+          ...(previous?.providerMessageId ? { replyToMessageId: previous.providerMessageId } : {}),
+        },
+        idempotencyKey: job.outboxId,
+      });
+    } catch (e) {
+      const notConnected = e instanceof MailboxNotConnectedError;
+      if (!notConnected && !(e instanceof MailRejectedError)) throw e; // anything else is retried
+      // Final: never send as someone else (M5), never retry a refused mail. Keep the failed row (the owner can
+      // Resend it from the Mail Trail) and tell the owner. Ops count failed rows (MailNotSent1h).
+      await this.ds.transaction(async (manager) => {
+        await manager
+          .getRepository(MailMessage)
+          .insert({ ...record, status: 'failed', error: e.message, providerMessageId: null });
+        await this.outbox.add(manager, {
+          destination: 'notification',
+          eventType: notConnected ? 'mail.mailbox_not_connected' : 'mail.send_rejected',
+          aggregateType: 'ticket',
+          aggregateId: ticket.id,
+          payload: { ticketId: ticket.id, ownerId: ticket.ownerId },
+        });
+      });
+      this.logger.warn(`${ticket.ticketNo}: mail from ${fromMailbox} not sent: ${e.message}`);
+      return;
+    }
+    await mails.insert({
+      ...record,
+      providerMessageId: sent.providerMessageId,
+      providerThreadId: sent.providerThreadId ?? null,
+      status: 'sent',
     });
   }
 

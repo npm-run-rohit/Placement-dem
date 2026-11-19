@@ -7,6 +7,7 @@ import { MailDirection } from '@bimaplacement/contracts';
  */
 @Entity('mail_messages')
 @Index('ix_mail_ticket_at', ['ticketId', 'at'])
+@Index('ix_mail_conversation', ['conversationRef', 'at'])
 @Index('ux_mail_outbox', ['outboxId'], { unique: true, where: 'outbox_id IS NOT NULL' })
 export class MailMessage {
   @PrimaryGeneratedColumn('uuid')
@@ -51,6 +52,13 @@ export class MailMessage {
 
   @Column({ name: 'provider_message_id', type: 'text', nullable: true })
   providerMessageId: string | null;
+
+  /** shared email layer conversation key: PLC-nnnn/TH-nn or PLC-nnnn/RM */
+  @Column({ name: 'conversation_ref', type: 'text', nullable: true })
+  conversationRef: string | null;
+
+  @Column({ name: 'provider_thread_id', type: 'text', nullable: true })
+  providerThreadId: string | null;
 
   @Column({ type: 'text', default: 'queued' })
   status: 'queued' | 'sent' | 'failed' | 'bounced' | 'received';

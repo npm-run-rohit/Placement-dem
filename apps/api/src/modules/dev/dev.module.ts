@@ -16,6 +16,7 @@ import { CopycatModule } from '../../integrations/copycat/copycat.module';
 import { DecisionsModule } from '../decisions/decisions.module';
 import { QcrModule } from '../qcr/qcr.module';
 import { BimaSetuModule } from '../../integrations/bimasetu/bimasetu.module';
+import { EmailLayerModule } from '../../integrations/email-layer/email-layer.module';
 /** Dev simulators (FEATURE_DEV_SIMULATORS) - replaces the prototype's amber Simulate blocks. */
 // AutomationModule: the SLA sweeper runs in-process after an engine-time move (it is only bound to queues in the worker)
 @Module({
@@ -31,6 +32,7 @@ import { BimaSetuModule } from '../../integrations/bimasetu/bimasetu.module';
     DecisionsModule,
     QcrModule,
     BimaSetuModule,
+    EmailLayerModule,
     InsurersModule,
     MastersModule,
   ],

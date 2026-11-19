@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DateTime } from 'luxon';
 import { DataSource, type EntityManager, Not } from 'typeorm';
 import {
@@ -7,11 +8,15 @@ import {
   EDITABLE_LOOKUP_KINDS,
   type AdminMastersView,
   type EditableLookupKind,
+  type MailboxStatusView,
   type MasterChangeView,
   type SlaId,
 } from '@bimaplacement/contracts';
 import { DomainError } from '../../common/errors/domain-error';
 import type { AuthUser } from '../../common/auth/auth.types';
+import type { AppConfig } from '../../config/configuration';
+import { MAILBOX, type MailboxConnector } from '../../infrastructure/mail/mailbox.port';
+import { User } from '../users/user.entity';
 import { SlaConfigService } from '../sla/sla-config.service';
 import {
   AppSetting,
@@ -65,6 +70,8 @@ export class MastersService {
   constructor(
     private readonly ds: DataSource,
     private readonly sla: SlaConfigService,
+    private readonly config: ConfigService<AppConfig, true>,
+    @Inject(MAILBOX) private readonly mailbox: MailboxConnector,
   ) {}
 
   productTypes() {
@@ -94,9 +101,12 @@ export class MastersService {
     return this.ds.getRepository(CommunicationTemplate).find();
   }
 
-  /** GET /masters/admin: the Admin screens' data, retired values included. Settings as currently in force. */
-  async admin(): Promise<AdminMastersView> {
-    const [sla, matrix, holidays, lookups, templates, products, settings] = await Promise.all([
+  /**
+   * GET /masters/admin: the Admin screens' data, retired values included. Settings as currently in force.
+   * Mailbox status asks the mail provider, so it is left out of save responses (`withMailboxes: false`).
+   */
+  async admin({ withMailboxes = true } = {}): Promise<AdminMastersView> {
+    const [sla, matrix, holidays, lookups, templates, products, settings, mailboxes] = await Promise.all([
       this.ds.getRepository(SlaDefinition).find({ where: { active: true }, order: { id: 'ASC' } }),
       this.ds.getRepository(QuoteTarget).find(),
       this.ds.getRepository(Holiday).find({ order: { date: 'ASC' } }),
@@ -104,10 +114,12 @@ export class MastersService {
       this.ds.getRepository(CommunicationTemplate).find({ order: { id: 'ASC' } }),
       this.ds.getRepository(ProductType).find({ order: { sortOrder: 'ASC' } }),
       this.ds.getRepository(AppSetting).find(),
+      withMailboxes ? this.mailboxStatuses() : undefined,
     ]);
     const setting = (key: string) => settings.find((s) => s.key === key)?.value;
     const cal = { ...BUSINESS_CALENDAR_DEFAULTS, ...((setting('business_calendar') as object) ?? {}) };
     return {
+      ...(mailboxes !== undefined ? { mailboxes: mailboxes as MailboxStatusView[] | null } : {}),
       sla: sla.map((d) => ({
         id: d.id,
         touchpoint: d.touchpoint,
@@ -160,6 +172,40 @@ export class MastersService {
         active: p.active,
       })),
     };
+  }
+
+  /**
+   * Read-only mailbox status per placement user (M5: mail only goes out from the assigned PM's own mailbox).
+   * null on the dev driver. One health() call for everyone; if it fails or hangs, everyone shows `unknown`
+   * and the view still loads.
+   */
+  private async mailboxStatuses(): Promise<MailboxStatusView[] | null> {
+    if (this.config.get('mailbox', { infer: true }).driver === 'dev') return null;
+    const users = await this.ds
+      .getRepository(User)
+      .createQueryBuilder('u')
+      .where('u.roles && ARRAY[:...roles]::text[]', { roles: ['placement_manager', 'placement_head'] })
+      .orderBy('u.name', 'ASC')
+      .getMany();
+    const rows = users.map((u) => ({
+      userName: u.name,
+      email: u.email,
+      mailbox: u.mailboxAddress ?? u.email,
+    }));
+    try {
+      const health = await Promise.race([
+        this.mailbox.health(rows.map((r) => r.mailbox)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timed out')), 6000).unref()),
+      ]);
+      return rows.map((r): MailboxStatusView => {
+        const h = health[r.mailbox];
+        if (!h) return { ...r, status: 'unknown', detail: 'no status from the mail provider' };
+        return { ...r, status: h.ok ? 'connected' : 'not_connected', detail: h.detail ?? null };
+      });
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      return rows.map((r): MailboxStatusView => ({ ...r, status: 'unknown', detail }));
+    }
   }
 
   /** Admin change history (FR-148); the Insurer Master keeps its own log screen. */
@@ -395,7 +441,7 @@ export class MastersService {
   private async save(fn: (m: EntityManager) => Promise<void>): Promise<AdminMastersView> {
     await this.ds.transaction(fn);
     await this.sla.refresh();
-    return this.admin();
+    return this.admin({ withMailboxes: false });
   }
 
   /** Copies changed fields onto the row, one change-log entry per field (FR-148). */

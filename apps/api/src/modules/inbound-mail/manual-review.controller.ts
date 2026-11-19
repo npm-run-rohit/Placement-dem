@@ -51,6 +51,11 @@ export class ManualReviewController {
     return this.inbound.confirmClassification(u, id, dto.label);
   }
 
+  @Post(':mailId/handled')
+  handled(@CurrentUser() u: AuthUser, @Param('mailId', ParseUUIDPipe) id: string) {
+    return this.inbound.markHandled(u, id);
+  }
+
   @Post(':mailId/mapping')
   map(
     @CurrentUser() u: AuthUser,

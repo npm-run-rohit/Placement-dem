@@ -8,6 +8,7 @@ import {
   ReviewQueue,
   ReviewStatus,
   Stage,
+  ThreadStatus,
   type InboundMailView,
   type ManualReviewCounts,
   type ReviewTicketOption,
@@ -21,6 +22,7 @@ import { Actors } from '../audit/actor';
 import { DocumentsService } from '../documents/documents.service';
 import { Document } from '../documents/document.entity';
 import { ThreadsService } from '../threads/threads.service';
+import { RfqService } from '../rfq/rfq.service';
 import { QuotesService } from '../quotes/quotes.service';
 import { TicketWorkflow } from '../tickets/ticket-workflow.service';
 import { PlacementTicket } from '../tickets/entities/placement-ticket.entity';
@@ -44,6 +46,18 @@ const REVIEW_CLASSES = [
   InboundClass.NOT_APPLICABLE,
   InboundClass.ACKNOWLEDGED,
 ];
+
+/** What a mail delivered by the shared email layer is, decided from its sender before any classification. */
+type SenderRule = 'rm_answer' | 'rm_review' | 'colleague_reply' | 'trail_only' | 'unanchored';
+
+/**
+ * Stored in review_reason of an auto-applied sender-rule mail (queue none): marks the effect a retried
+ * delivery still has to finish, since these mails carry no classification.
+ */
+const RM_ANSWER_REASON = 'RM answer applied to the RFQ';
+const COLLEAGUE_REPLY_REASON = 'Colleague reply from Gmail';
+/** The effect's claim label: stored as applied_class, which also marks "effect committed" (claim-mail.ts). */
+const SENDER_RULE_CLAIM = InboundClass.ACKNOWLEDGED;
 
 type Mapping = {
   ticket: PlacementTicket | null;
@@ -73,22 +87,31 @@ export class InboundMailService {
     private readonly quotes: QuotesService,
     private readonly workflow: TicketWorkflow,
     private readonly mailTrail: MailTrailService,
+    private readonly rfq: RfqService,
   ) {}
 
   async ingest(raw: InboundMailRaw): Promise<InboundMail | null> {
-    if (await this.mails.exist({ where: { providerMessageId: raw.providerMessageId } })) return null; // duplicate (10.2)
+    const existing = await this.mails.findOne({ where: { providerMessageId: raw.providerMessageId } });
+    if (existing) {
+      await this.finishUnapplied(existing); // a retry completes a mail whose apply step did not finish
+      return null; // duplicate (10.2)
+    }
     const map = await this.map(raw);
-    const cls = await this.classifier.classify({
-      subject: raw.subject,
-      body: raw.textBody,
-      attachmentNames: raw.attachments.map((a) => a.fileName),
-    });
+    const rule = await this.senderRule(raw, map);
+    // sender rules never classify the mail as insurer mail (only the "no rule applies" path does)
+    const cls = rule
+      ? null
+      : await this.classifier.classify({
+          subject: raw.subject,
+          body: raw.textBody,
+          attachmentNames: raw.attachments.map((a) => a.fileName),
+        });
 
     const docIds: string[] = [];
     const rejected: string[] = []; // failed the malware scan (PLAN 4.5): never stored, never applied
     for (const a of raw.attachments) {
       const kind =
-        /\.pdf$/i.test(a.fileName) && cls.label === InboundClass.QUOTE_RECEIVED
+        /\.pdf$/i.test(a.fileName) && cls?.label === InboundClass.QUOTE_RECEIVED
           ? DocumentKind.QUOTE
           : DocumentKind.MAIL_ATTACHMENT;
       try {
@@ -108,11 +131,30 @@ export class InboundMailService {
     }
 
     const unknownSender =
-      !!map.thread && !map.thread.pocs.some((p) => p.email.toLowerCase() === raw.from.toLowerCase());
+      !rule && !!map.thread && !map.thread.pocs.some((p) => p.email.toLowerCase() === raw.from.toLowerCase());
     const closed = map.ticket?.stage === Stage.CLOSED;
     let queue: ReviewQueue;
     let reason: string | null;
-    if (!map.thread || map.senderOnly) {
+    if (rule === 'rm_answer') {
+      queue = ReviewQueue.NONE;
+      reason = RM_ANSWER_REASON;
+    } else if (rule === 'rm_review') {
+      queue = ReviewQueue.MY_REVIEWS;
+      reason = 'RM mail - apply it from the RFQ tab';
+    } else if (rule === 'colleague_reply') {
+      queue = ReviewQueue.NONE;
+      reason = COLLEAGUE_REPLY_REASON;
+    } else if (rule === 'trail_only') {
+      queue = ReviewQueue.NONE;
+      reason = 'Colleague mail - kept on the Mail Trail only';
+    } else if (rule === 'unanchored' && closed) {
+      queue = ReviewQueue.NONE; // FR-135: a closed ticket never reopens, and a review item could never be cleared
+      reason = 'Ticket closed - kept on the Mail Trail only';
+    } else if (rule === 'unanchored') {
+      // BR-046: no conversation chain, so a person confirms; never applied automatically
+      queue = map.ticket ? ReviewQueue.MY_REVIEWS : ReviewQueue.UNMATCHED;
+      reason = 'Not part of a Placement email chain - confirm';
+    } else if (!map.thread || map.senderOnly) {
       queue = ReviewQueue.UNMATCHED;
       reason = map.senderOnly
         ? 'Matched by sender only - confirm the ticket and thread'
@@ -125,7 +167,7 @@ export class InboundMailService {
     } else if (closed) {
       queue = ReviewQueue.NONE; // closed tickets never reopen (FR-135): keep it on the trail only
       reason = 'Ticket closed - kept on the Mail Trail only';
-    } else if (cls.confidence >= AUTO_APPLY_MIN && cls.label !== InboundClass.NOT_APPLICABLE) {
+    } else if (cls!.confidence >= AUTO_APPLY_MIN && cls!.label !== InboundClass.NOT_APPLICABLE) {
       queue = ReviewQueue.NONE;
       reason = null;
     } else {
@@ -153,8 +195,8 @@ export class InboundMailService {
         mappingConfidence: map.confidence,
         mappingBasis: map.basis,
         unknownSender,
-        classification: cls.label,
-        classificationConfidence: cls.confidence,
+        classification: cls?.label ?? null,
+        classificationConfidence: cls?.confidence ?? null,
         reviewQueue: queue,
         reviewReason: reason,
         reviewStatus: queue === ReviewQueue.NONE ? ReviewStatus.CONFIRMED : ReviewStatus.PENDING,
@@ -162,9 +204,45 @@ export class InboundMailService {
     );
 
     // a reliably mapped mail is on the ticket's Mail Trail straight away (also when it still needs review)
-    if (map.ticket && map.thread && !map.senderOnly) await this.toMailTrail(saved);
-    if (queue === ReviewQueue.NONE && !closed) await this.apply(saved, cls.label, null);
+    const onTrail = rule
+      ? (rule !== 'unanchored' || closed) && !!map.ticket // open-ticket unanchored mail: only once a person confirms
+      : !!map.ticket && !!map.thread && !map.senderOnly;
+    if (onTrail) await this.toMailTrail(saved);
+    if (queue === ReviewQueue.NONE && !closed && rule !== 'trail_only')
+      await this.applyOrReview(saved, cls?.label ?? null);
     return saved;
+  }
+
+  /**
+   * Auto-apply; a business refusal (DomainError: the mail cannot be applied to this thread now) sends the mail to
+   * My reviews instead of failing the delivery (BR-046: what the bot will not apply goes to a person). Anything
+   * else (database, programming error) propagates so the caller can retry.
+   */
+  private async applyOrReview(mail: InboundMail, label: InboundClass | null) {
+    try {
+      if (mail.reviewReason === RM_ANSWER_REASON) await this.applyRmAnswer(mail);
+      else if (mail.reviewReason === COLLEAGUE_REPLY_REASON) await this.applyColleagueReply(mail);
+      else await this.apply(mail, label!, null);
+    } catch (e) {
+      if (!(e instanceof DomainError)) throw e;
+      this.logger.warn(`Mail ${mail.providerMessageId} not auto-applied: ${e.message}`);
+      mail.reviewQueue = ReviewQueue.MY_REVIEWS;
+      mail.reviewStatus = ReviewStatus.PENDING;
+      mail.reviewReason = `Could not be applied automatically: ${e.message}`;
+      await this.mails.save(mail);
+    }
+  }
+
+  /** A saved mail that was meant to auto-apply but never finished (crash or transient error after the save). */
+  private async finishUnapplied(mail: InboundMail) {
+    if (mail.reviewQueue !== ReviewQueue.NONE || mail.appliedClass || !mail.ticketId) return;
+    const rmAnswer = mail.reviewReason === RM_ANSWER_REASON;
+    const colleague = mail.reviewReason === COLLEAGUE_REPLY_REASON;
+    if (!rmAnswer && (!mail.threadId || (!colleague && !mail.classification))) return;
+    const ticket = await this.ds.getRepository(PlacementTicket).findOneBy({ id: mail.ticketId });
+    if (!ticket || ticket.stage === Stage.CLOSED) return;
+    await this.toMailTrail(mail);
+    await this.applyOrReview(mail, mail.classification);
   }
 
   /** Manual Review queues (FR-227). My reviews = mapped and owned by me; Unmatched = shared. Pending first, then today's done. */
@@ -235,12 +313,39 @@ export class InboundMailService {
     if (label === InboundClass.QUOTE_RECEIVED && !mail.attachmentDocumentIds.length)
       throw DomainError.guard('There is no attachment to record as the quote');
 
+    // unanchored mail reaches the trail only once a person confirms it; before the effect, so the effect links to it
+    await this.toMailTrail(mail);
     await this.apply(mail, label, user);
     Object.assign(mail, {
       reviewStatus: ReviewStatus.CONFIRMED,
       reviewedById: user.id,
       reviewedAt: this.clock.now(),
       appliedClass: label,
+    });
+    await this.mails.save(mail);
+    return (await this.views([mail]))[0];
+  }
+
+  /**
+   * Clears a pending My-reviews mail with no commercial effect (e.g. an RM mail the PM applies from the RFQ tab).
+   * Audited with the reviewer and the subject.
+   */
+  async markHandled(user: AuthUser, mailId: string): Promise<InboundMailView> {
+    const mail = await this.mails.findOneByOrFail({ id: mailId });
+    if (
+      mail.reviewStatus !== ReviewStatus.PENDING ||
+      mail.reviewQueue !== ReviewQueue.MY_REVIEWS ||
+      !mail.ticketId
+    )
+      throw DomainError.guard('Only a pending mail in My reviews can be marked handled');
+    await assertTicketVisible(this.ds, user, mail.ticketId); // FR-208
+    await this.workflow.run(mail.ticketId, Actors.user(user), (ctx) =>
+      ctx.audit('Manual review handled', `${user.name} · ${mail.subject}`.slice(0, 300)),
+    );
+    Object.assign(mail, {
+      reviewStatus: ReviewStatus.CONFIRMED,
+      reviewedById: user.id,
+      reviewedAt: this.clock.now(),
     });
     await this.mails.save(mail);
     return (await this.views([mail]))[0];
@@ -254,8 +359,11 @@ export class InboundMailService {
     threadId: string,
   ): Promise<InboundMailView> {
     const mail = await this.mails.findOneByOrFail({ id: mailId });
-    if (mail.reviewStatus !== ReviewStatus.PENDING || mail.reviewQueue !== ReviewQueue.UNMATCHED)
-      throw DomainError.guard('Only a pending unmatched mail can be mapped');
+    const mappable =
+      mail.reviewQueue === ReviewQueue.UNMATCHED ||
+      (mail.reviewQueue === ReviewQueue.MY_REVIEWS && !mail.threadId); // e.g. unanchored or RM mail with no thread
+    if (mail.reviewStatus !== ReviewStatus.PENDING || !mappable)
+      throw DomainError.guard('Only a pending mail with no insurer thread can be mapped');
     await assertTicketVisible(this.ds, user, ticketId); // FR-208
     const thread = await this.ds.getRepository(InsurerThread).findOneBy({ id: threadId, ticketId });
     if (!thread) throw DomainError.guard('That insurer thread is not on the selected ticket');
@@ -295,6 +403,17 @@ export class InboundMailService {
     const tickets = this.ds.getRepository(PlacementTicket);
     const threads = this.ds.getRepository(InsurerThread);
     const strip = (id: string) => id.replace(/^<|>$/g, '');
+    const conv = raw.conversationRef?.match(/^(PLC-\d{4,})(?:\/(.+))?$/);
+    if (conv) {
+      const ticket = await tickets.findOneBy({ ticketNo: conv[1] });
+      const thread =
+        ticket && conv[2] && conv[2] !== 'RM'
+          ? await threads.findOneBy({ ticketId: ticket.id, threadRef: conv[2] })
+          : null; // `/RM` = RM mail on a manual ticket: ticket only
+      // a ref that does not resolve (unknown ticket or thread) anchors nothing: normal mapping only suggests
+      if (ticket && (thread || !conv[2] || conv[2] === 'RM'))
+        return { ticket, thread, basis: 'conversation', confidence: 1, senderOnly: false };
+    }
     const chain = [raw.inReplyTo, ...(raw.references ?? [])].filter((x): x is string => !!x).map(strip);
     if (chain.length) {
       const sent = await this.ds
@@ -340,6 +459,80 @@ export class InboundMailService {
     return { ticket: null, thread: null, basis: null, confidence: 0, senderOnly: false };
   }
 
+  /**
+   * Shared email layer sender rules, in order: a registered conversation anchors the mail (map()); then the RM,
+   * then a colleague's own Gmail, then mail with no chain (BR-046). null = ordinary insurer mail.
+   * A colleague's mail answers the insurer only if it went to someone outside the team (decision 11).
+   */
+  private async senderRule(raw: InboundMailRaw, map: Mapping): Promise<SenderRule | null> {
+    if (!raw.viaEmailLayer) return null;
+    const ticket = map.ticket;
+    if (!raw.conversationRef || !ticket || map.basis !== 'conversation') return 'unanchored'; // BR-046
+    if (ticket.rmEmail && ticket.rmEmail.toLowerCase() === raw.from.toLowerCase())
+      return ticket.stage === Stage.AWAITING_RM ? 'rm_answer' : 'rm_review';
+    if (raw.sentByStaff) {
+      const th = map.thread;
+      if (!th) return 'trail_only';
+      const waiting =
+        th.status === ThreadStatus.AWAITING_RM || th.status === ThreadStatus.INSURER_CLARIFICATION;
+      return waiting && (await this.reachesOutsider(raw, th)) ? 'colleague_reply' : 'trail_only';
+    }
+    return null;
+  }
+
+  /**
+   * True when at least one To/Cc address is not staff: a POC of the thread, or any address that is not a
+   * Placement user. Internal mail between colleagues does not answer the insurer.
+   */
+  private async reachesOutsider(raw: InboundMailRaw, th: InsurerThread): Promise<boolean> {
+    const recipients = [
+      ...new Set([...raw.to, ...raw.cc].map((a) => a.trim().toLowerCase()).filter(Boolean)),
+    ];
+    if (!recipients.length) return false;
+    const pocs = new Set(th.pocs.map((p) => p.email.toLowerCase()));
+    if (recipients.some((r) => pocs.has(r))) return true;
+    const staff = await this.ds
+      .getRepository(User)
+      .createQueryBuilder('u')
+      .select(['u.email', 'u.mailboxAddress'])
+      .where('LOWER(u.email) IN (:...r) OR LOWER(u.mailbox_address) IN (:...r)', { r: recipients })
+      .getMany();
+    const staffSet = new Set(
+      staff
+        .flatMap((u) => [u.email, u.mailboxAddress])
+        .filter(Boolean)
+        .map((a) => a!.toLowerCase()),
+    );
+    return recipients.some((r) => !staffSet.has(r));
+  }
+
+  /** An RM mail on an awaiting_rm ticket: the answer is recorded, the query stays open for the PM (BR-111). */
+  private async applyRmAnswer(mail: InboundMail) {
+    const ticket = await this.ds.getRepository(PlacementTicket).findOneByOrFail({ id: mail.ticketId! });
+    await this.rfq.recordRmAnswer(Actors.system('RM by mail'), ticket.id, {
+      text: mail.bodyText.trim() || mail.subject,
+      answeredBy: ticket.rmName,
+      answerOpenQueries: true,
+      claim: mail.appliedClass ? undefined : { id: mail.id, label: SENDER_RULE_CLAIM },
+    });
+    await this.syncApplied(mail);
+  }
+
+  /** A colleague's Gmail reply on a thread waiting on us: resumes it like an in-app reply, sends nothing (FR-064). */
+  private async applyColleagueReply(mail: InboundMail) {
+    const colleague = await this.ds.getRepository(User).findOneBy({ email: mail.fromAddress.toLowerCase() });
+    const byName = colleague?.name ?? mail.fromAddress;
+    await this.threads.recordColleagueReply(
+      Actors.system(`${byName} (Gmail)`),
+      mail.ticketId!,
+      mail.threadId!,
+      mail.bodyText.trim() || mail.subject,
+      byName,
+      mail.appliedClass ? undefined : { id: mail.id, label: SENDER_RULE_CLAIM },
+    );
+    await this.syncApplied(mail);
+  }
+
   /** Apply a class to the mapped thread through the same commands as an auto-applied mail (FR-228). */
   private async apply(mail: InboundMail, label: InboundClass, reviewer: AuthUser | null) {
     const ticketId = mail.ticketId!;
@@ -351,6 +544,8 @@ export class InboundMailService {
       await this.ds.getRepository(MailMessage).findOneBy({ providerMessageId: mail.providerMessageId })
     )?.id;
     const text = mail.bodyText.trim() || mail.subject;
+    // the applied marker is set by the effect's own transaction; a mail already applied is not applied again
+    const claim = mail.appliedClass ? undefined : { id: mail.id, label };
     switch (label) {
       case InboundClass.QUOTE_RECEIVED: {
         const docs = await this.ds.getRepository(Document).findBy({ id: In(mail.attachmentDocumentIds) });
@@ -358,22 +553,27 @@ export class InboundMailService {
         if (!pdf) throw DomainError.guard('There is no attachment to record as the quote');
         if (pdf.kind !== DocumentKind.QUOTE)
           await this.ds.getRepository(Document).update({ id: pdf.id }, { kind: DocumentKind.QUOTE });
-        await this.quotes.ingestQuote(actor, ticketId, threadId, { documentId: pdf.id, mailId });
+        await this.quotes.ingestQuote(actor, ticketId, threadId, { documentId: pdf.id, mailId, claim });
         break;
       }
       case InboundClass.CLARIFICATION_REQUIRED:
-        await this.threads.applyInsurerEvent(actor, ticketId, threadId, 'clarification', { text, mailId });
+        await this.threads.applyInsurerEvent(actor, ticketId, threadId, 'clarification', {
+          text,
+          mailId,
+          claim,
+        });
         break;
       case InboundClass.DECLINED:
-        await this.threads.applyInsurerEvent(actor, ticketId, threadId, 'decline', { text, mailId });
+        await this.threads.applyInsurerEvent(actor, ticketId, threadId, 'decline', { text, mailId, claim });
         break;
       case InboundClass.ACKNOWLEDGED:
-        await this.threads.applyInsurerEvent(actor, ticketId, threadId, 'ack', { text, mailId });
+        await this.threads.applyInsurerEvent(actor, ticketId, threadId, 'ack', { text, mailId, claim });
         break;
       case InboundClass.NOT_APPLICABLE:
         await this.threads.applyInsurerEvent(actor, ticketId, threadId, 'not_applicable', {
           text: `Inbound mail marked not applicable · ${mail.subject}`,
           mailId,
+          claim,
         });
         break;
     }
@@ -385,10 +585,15 @@ export class InboundMailService {
         ),
       );
     }
+    await this.syncApplied(mail);
+  }
+
+  /** Pick up the applied marker the effect's own transaction set. */
+  private async syncApplied(mail: InboundMail) {
     if (!mail.appliedClass) {
-      mail.appliedClass = label;
-      mail.processedAt = this.clock.now();
-      await this.mails.save(mail);
+      const done = await this.mails.findOneByOrFail({ id: mail.id });
+      mail.appliedClass = done.appliedClass;
+      mail.processedAt = done.processedAt;
     }
   }
 

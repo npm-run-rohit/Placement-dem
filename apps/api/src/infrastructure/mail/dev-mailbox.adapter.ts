@@ -101,7 +101,7 @@ export class DevMailboxAdapter implements MailboxConnector {
     return { messages, nextCursor: null };
   }
 
-  async health() {
-    return { ok: true };
+  async health(mailboxes: string[]) {
+    return Object.fromEntries(mailboxes.map((m) => [m, { ok: true }]));
   }
 }

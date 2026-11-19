@@ -33,6 +33,12 @@ export interface InboundMailRaw {
   receivedAt: Date;
   inReplyTo?: string | null;
   references?: string[];
+  /** Shared email layer: PLC-nnnn/TH-nn or PLC-nnnn/RM; null = no conversation chain. */
+  conversationRef?: string | null;
+  /** Sent by a connected BimaKavach colleague, not the other party. */
+  sentByStaff?: boolean;
+  /** Delivered by the shared email layer (not polled from a mailbox). */
+  viaEmailLayer?: boolean;
   attachments: Array<{ fileName: string; contentType: string; size: number; fetch: () => Promise<Buffer> }>;
 }
 
@@ -43,7 +49,13 @@ export interface MailboxConnector {
     mailbox: string,
     cursor: string | null,
   ): Promise<{ messages: InboundMailRaw[]; nextCursor: string | null }>;
-  health(mailbox: string): Promise<{ ok: boolean; detail?: string }>;
+  /** Status of each given mailbox, from one call to the provider. Never throws for a provider outage. */
+  health(mailboxes: string[]): Promise<Record<string, MailboxHealth>>;
+}
+
+export interface MailboxHealth {
+  ok: boolean;
+  detail?: string;
 }
 
 export const MAILBOX = Symbol('MAILBOX');

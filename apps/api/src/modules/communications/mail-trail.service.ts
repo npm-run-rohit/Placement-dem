@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource, In } from 'typeorm';
+import { DomainError } from '../../common/errors/domain-error';
+import { isHead, type AuthUser } from '../../common/auth/auth.types';
+import { OutboxEvent } from '../../infrastructure/outbox/outbox-event.entity';
+import { Actors } from '../audit/actor';
+import { TicketWorkflow } from '../tickets/ticket-workflow.service';
 import type { BimaSetuMessageView, MailView } from '@bimaplacement/contracts';
 import { MailDirection } from '@bimaplacement/contracts';
 import { MailMessage } from './entities/mail-message.entity';
@@ -14,12 +19,23 @@ import { BimaSetuMessage } from '../../integrations/bimasetu/bimasetu-message.en
 /** Read side of the Mail Trail tab: mail per ticket (FR-053) and the BimaSetu message log (FR-291). */
 @Injectable()
 export class MailTrailService {
-  constructor(private readonly ds: DataSource) {}
+  constructor(
+    private readonly ds: DataSource,
+    private readonly workflow: TicketWorkflow,
+  ) {}
 
   async mails(ticketId: string): Promise<MailView[]> {
     const rows = await this.ds
       .getRepository(MailMessage)
       .find({ where: { ticketId }, order: { at: 'DESC' } });
+    const failedIds = rows.filter((r) => r.status === 'failed').map((r) => r.id);
+    const resent: Array<{ id: string }> = failedIds.length
+      ? await this.ds.query(
+          `SELECT payload->>'resendOf' AS id FROM outbox_events
+            WHERE destination = 'mail' AND payload->>'resendOf' = ANY($1)`,
+          [failedIds],
+        )
+      : [];
     const threadIds = [...new Set(rows.map((r) => r.threadId).filter((x): x is string => !!x))];
     const threads = threadIds.length
       ? await this.ds.getRepository(InsurerThread).find({ where: { id: In(threadIds) } })
@@ -52,9 +68,49 @@ export class MailTrailService {
         })),
         rfqLinkInBody: m.rfqLinkInBody,
         status: m.status,
+        error: m.error,
+        resent: resent.some((r) => r.id === m.id),
         at: m.at.toISOString(),
       };
     });
+  }
+
+  /**
+   * Resend a failed outbound mail (e.g. after the PM connected Gmail): a NEW mail outbox event with the original
+   * payload, so the handler renders it again and chains it on the same conversation ref. The failed row stays as
+   * it is (the trail is append-only). Owner or Placement Head; once per failed mail.
+   */
+  async resend(user: AuthUser, ticketId: string, mailId: string): Promise<{ resent: true }> {
+    return this.workflow.run(
+      ticketId,
+      Actors.user(user),
+      async (ctx) => {
+        if (!isHead(user) && ctx.ticket.ownerId !== user.id)
+          throw new DomainError('FORBIDDEN', 'Only the ticket owner or the Placement Head can resend a mail');
+        const mail = await ctx.manager.getRepository(MailMessage).findOneBy({ id: mailId, ticketId });
+        if (!mail) throw DomainError.notFound('Mail', mailId);
+        if (mail.direction !== MailDirection.OUTBOUND || mail.status !== 'failed' || !mail.outboxId)
+          throw DomainError.guard('Only a failed outbound mail can be resent');
+        const outbox = ctx.manager.getRepository(OutboxEvent);
+        const original = await outbox.findOneBy({ id: mail.outboxId });
+        if (!original) throw DomainError.guard('The original mail event is gone; this mail cannot be resent');
+        const already = await outbox
+          .createQueryBuilder('o')
+          .where(`o.destination = 'mail' AND o.payload->>'resendOf' = :id`, { id: mail.id })
+          .getExists();
+        if (already) throw new DomainError('CONFLICT', 'This mail was already resent');
+        await ctx.outbox({
+          destination: 'mail',
+          eventType: original.eventType,
+          aggregateType: original.aggregateType,
+          aggregateId: original.aggregateId,
+          payload: { ...original.payload, resendOf: mail.id },
+        });
+        await ctx.audit('Mail resent', mail.subject);
+        return { resent: true as const };
+      },
+      { allowTerminal: true },
+    );
   }
 
   /**

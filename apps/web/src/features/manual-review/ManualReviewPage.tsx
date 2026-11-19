@@ -106,13 +106,19 @@ function MailCard({ mail: m }: { mail: InboundMailView }) {
         </div>
         {done ? (
           <div className="flex items-center gap-1.5 text-dense font-medium text-t-green">
-            <CheckCircle2 size={15} /> Confirmed as {m.appliedClass} - applied to the thread
+            <CheckCircle2 size={15} />{' '}
+            {m.appliedClass ? `Confirmed as ${m.appliedClass} - applied to the thread` : 'Marked handled'}
             {m.reviewedBy ? ` · ${m.reviewedBy}` : ''}
           </div>
         ) : m.queue === 'unmatched' ? (
           <MapControls mail={m} />
-        ) : (
+        ) : m.thread ? (
           <ClassifyControls mail={m} />
+        ) : (
+          <>
+            <MapControls mail={m} />
+            <HandledButton mail={m} />
+          </>
         )}
       </div>
     </article>
@@ -151,7 +157,21 @@ function ClassifyControls({ mail: m }: { mail: InboundMailView }) {
             Open Thread
           </Button>
         )}
+        <HandledButton mail={m} />
       </div>
+    </div>
+  );
+}
+
+/** Clears a My-reviews mail with no commercial effect (e.g. an RM mail the PM applies from the RFQ tab). */
+function HandledButton({ mail: m }: { mail: InboundMailView }) {
+  const handled = useReviewAction<Record<string, never>>(`/manual-review/${m.id}/handled`);
+  return (
+    <div className="space-y-1">
+      <Button size="sm" disabled={handled.isPending} onClick={() => handled.mutate({})}>
+        Mark Handled
+      </Button>
+      {handled.error && <div className="text-meta text-t-red">{(handled.error as Error).message}</div>}
     </div>
   );
 }

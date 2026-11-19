@@ -21,6 +21,7 @@ The `placement-prod` CloudWatch dashboard shows every metric below.
 | `unmatched-mail-backlog` | [unmatched-mail-backlog](unmatched-mail-backlog.md) |
 | `copycat-failures` | [copycat-failures](copycat-failures.md) |
 | `bima-setu-inbound-retrying`, `bima-setu-inbound-rejected` | [bimasetu-inbound](bimasetu-inbound.md) |
+| `email-layer-inbound-failing` | [email-layer-inbound](email-layer-inbound.md) |
 | `api-no-healthy-hosts` | [api-down](api-down.md) |
 | `api-target5xx`, `alb-elb5xx` | [api-errors](api-errors.md) |
 | `worker-down` | [worker-down](worker-down.md) |

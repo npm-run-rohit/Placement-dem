@@ -16,7 +16,7 @@ export class GmailMailboxAdapter implements MailboxConnector {
   async fetchNew(): Promise<{ messages: never[]; nextCursor: string | null }> {
     throw DomainError.notImplemented('GmailMailboxAdapter.fetchNew');
   }
-  async health() {
-    return { ok: false, detail: 'not implemented' };
+  async health(mailboxes: string[]) {
+    return Object.fromEntries(mailboxes.map((m) => [m, { ok: false, detail: 'not implemented' }]));
   }
 }

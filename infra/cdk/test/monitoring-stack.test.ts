@@ -33,7 +33,10 @@ describe('MonitoringStack', () => {
     expect(alarm('unmatched-mail-backlog')).toMatchObject({ MetricName: 'UnmatchedMailPending' });
     expect(alarm('copycat-failures')).toMatchObject({ MetricName: 'CopycatFailures15m' });
     expect(alarm('mail-send-failures')).toMatchObject({ MetricName: 'FailedJobs' });
+    expect(alarm('mail-not-sent')).toMatchObject({ MetricName: 'MailNotSent1h' });
+    expect(alarm('mail-not-sent').AlarmDescription).toMatch(/mail-send-failures\.md$/);
     expect(alarm('sla-engine-errors')).toMatchObject({ MetricName: 'JobErrors' });
+    expect(alarm('email-layer-inbound-failing')).toMatchObject({ MetricName: 'EmailLayerInboundFailed1h' });
   });
 
   test('silence counts as trouble where it means a stopped worker or service', () => {

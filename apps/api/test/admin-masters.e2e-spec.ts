@@ -39,10 +39,12 @@ describe('Admin masters', () => {
     expect(view.sla.find((s: { id: string }) => s.id === 'SLA-06').derived).toBe(true);
     expect(view.calendar.minutesPerDay).toBe(540);
     expect(view.lookups.every((l: { kind: string }) => l.kind !== 'urgency')).toBe(true);
+    expect(view.mailboxes).toBeNull(); // dev driver: no real mailboxes
   });
 
   it('edits an SLA target, logs before/after and reloads the clock config (FR-139, FR-148)', async () => {
     const view = (await head.patch('/masters/sla/SLA-02', { targetMins: 90 }).expect(200)).body;
+    expect('mailboxes' in view).toBe(false); // a save does not ask the mail provider for mailbox status
     expect(view.sla.find((s: { id: string }) => s.id === 'SLA-02')).toMatchObject({
       targetMins: 90,
       targetText: '90 business minutes',

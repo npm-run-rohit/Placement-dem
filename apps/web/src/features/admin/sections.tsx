@@ -18,14 +18,20 @@ const label = 'mb-1 block text-meta font-semibold text-ink-2';
 const th = 'px-3 py-2';
 const td = 'px-3 py-2.5';
 
-/** Every admin write returns the refreshed view; each section keeps its own error. */
+/**
+ * Every admin write returns the refreshed view (without mailbox status, which only the page load asks the
+ * mail provider for); each section keeps its own error.
+ */
 function useAdminSave() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ path, method, json }: { path: string; method: 'POST' | 'PUT' | 'PATCH'; json: unknown }) =>
       api<AdminMastersView>(`/masters${path}`, { method, json }),
     onSuccess: (view) => {
-      qc.setQueryData(['masters', 'admin'], view);
+      qc.setQueryData<AdminMastersView>(['masters', 'admin'], (prev) => ({
+        ...view,
+        mailboxes: view.mailboxes !== undefined ? view.mailboxes : (prev?.mailboxes ?? null),
+      }));
       qc.invalidateQueries({ queryKey: ['masters', 'change-log'] });
     },
   });
@@ -848,5 +854,45 @@ function ProductRow({
         </Button>
       </td>
     </tr>
+  );
+}
+
+// ---------------------------------------------------------------- Mailboxes (read-only)
+
+/** Which placement users can send through the connected mailbox provider (M5). Gmail is connected in the email layer, not here. */
+export function MailboxesSection({ view }: { view: AdminMastersView }) {
+  const rows = view.mailboxes ?? [];
+  return (
+    <SectionCard title="Mailboxes">
+      <p className="mb-3 text-dense text-ink-2">
+        Insurer and RM mail goes out only from the assigned Placement Manager's own mailbox.
+      </p>
+      {rows.length === 0 ? (
+        <div className="text-dense text-ink-2">No Placement Managers or Placement Heads found.</div>
+      ) : (
+        <Table head={['Placement User', 'Mailbox', 'Status']}>
+          {rows.map((r) => (
+            <tr key={r.email} className="border-t-[0.5px] border-line">
+              <td className={td}>{r.userName}</td>
+              <td className={td}>{r.mailbox}</td>
+              <td className={td}>
+                <Chip
+                  tone={r.status === 'connected' ? 'green' : r.status === 'unknown' ? 'neutral' : 'amber'}
+                >
+                  {r.status === 'connected'
+                    ? 'Connected'
+                    : r.status === 'unknown'
+                      ? 'Status Unknown'
+                      : 'Not Connected for Sending'}
+                </Chip>
+                {r.detail && r.status !== 'connected' && (
+                  <span className="ml-2 text-meta text-ink-2">{r.detail}</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      )}
+    </SectionCard>
   );
 }

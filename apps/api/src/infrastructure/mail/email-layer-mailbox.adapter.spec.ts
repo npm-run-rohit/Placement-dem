@@ -1,5 +1,9 @@
 import { SIGNATURE_HEADER, verifyEmailLayerSignature } from '../../integrations/email-layer/contract';
-import { EmailLayerMailboxAdapter, MailboxNotConnectedError } from './email-layer-mailbox.adapter';
+import {
+  EmailLayerMailboxAdapter,
+  MailboxNotConnectedError,
+  MailRejectedError,
+} from './email-layer-mailbox.adapter';
 import type { StoragePort } from '../storage/storage.port';
 
 const cfg = { url: 'http://layer.test/', secret: 'shh', webhookToleranceSeconds: 300 };
@@ -90,6 +94,46 @@ describe('EmailLayerMailboxAdapter', () => {
     expect(e2.message).toMatch(/503/);
   });
 
+  it('throws MailRejectedError (final) on 422 SEND_REJECTED, but a plain Error on a bare 422', async () => {
+    fetchMock.mockResolvedValue(reply(422, { code: 'SEND_REJECTED', message: 'Invalid To header' }));
+    const e1 = await adapter.send(mail).catch((e) => e);
+    expect(e1).toBeInstanceOf(MailRejectedError);
+    expect(e1.message).toMatch(/Invalid To header/);
+    fetchMock.mockResolvedValue(reply(422, { message: 'Could not fetch attachment rfq.xlsx' }));
+    const e2 = await adapter.send(mail).catch((e) => e);
+    expect(e2).not.toBeInstanceOf(MailRejectedError);
+  });
+
+  it('sends with a timeout signal', async () => {
+    fetchMock.mockResolvedValue(
+      reply(200, { rfcMessageId: '<m@x>', gmailMessageId: 'g1', gmailThreadId: 't1', sentAt: 'now' }),
+    );
+    await adapter.send(mail);
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('posts to the send path and reads the health shape that the contract doc documents (C1 seam)', async () => {
+    const { readFileSync } = jest.requireActual<typeof import('node:fs')>('node:fs');
+    const { resolve } = jest.requireActual<typeof import('node:path')>('node:path');
+    const doc = readFileSync(
+      resolve(__dirname, '../../../../../docs/integration/EMAIL-LAYER-CONTRACT.md'),
+      'utf8',
+    ).replace(/\r\n/g, '\n');
+    const send = /`POST (\/email-layer\/v1\/[a-z]+)` \(product to layer\)/.exec(doc)?.[1];
+    expect(send).toBe('/email-layer/v1/messages');
+    fetchMock.mockResolvedValue(
+      reply(200, { rfcMessageId: '<m@x>', gmailMessageId: 'g1', gmailThreadId: 't1', sentAt: 'now' }),
+    );
+    await adapter.send(mail);
+    expect(fetchMock.mock.calls[0][0]).toBe(`http://layer.test${send}`);
+
+    const health = JSON.parse(/### Health response\n\n```json\n([\s\S]*?)\n```/.exec(doc)![1]);
+    fetchMock.mockResolvedValue(reply(200, health));
+    const out = await adapter.health([...health.connected, ...health.mailboxesWithoutSend]);
+    expect(out[health.connected[0]]).toEqual({ ok: true });
+    expect(out[health.mailboxesWithoutSend[0]].ok).toBe(false);
+  });
+
   it('requires a conversation', async () => {
     await expect(adapter.send({ ...mail, conversation: undefined })).rejects.toThrow(/conversation/);
   });
@@ -98,13 +142,34 @@ describe('EmailLayerMailboxAdapter', () => {
     await expect(adapter.fetchNew('pm@x', 'c1')).resolves.toEqual({ messages: [], nextCursor: 'c1' });
   });
 
-  it('health lists an unconnected mailbox as not ok', async () => {
-    fetchMock.mockResolvedValue(reply(200, { ok: true, mailboxesWithoutSend: ['pm@bimakavach.com'] }));
-    await expect(adapter.health('pm@bimakavach.com')).resolves.toEqual({
-      ok: false,
-      detail: 'pm@bimakavach.com has not connected Gmail for sending',
+  it('health: one call; connected is ok, listed without send must reconnect, anyone else has not connected', async () => {
+    fetchMock.mockResolvedValue(
+      reply(200, {
+        ok: true,
+        connected: ['PM@bimakavach.com'],
+        mailboxesWithoutSend: ['col@bimakavach.com'],
+      }),
+    );
+    await expect(
+      adapter.health(['pm@bimakavach.com', 'col@bimakavach.com', 'never@bimakavach.com']),
+    ).resolves.toEqual({
+      'pm@bimakavach.com': { ok: true },
+      'col@bimakavach.com': { ok: false, detail: 'col@bimakavach.com must reconnect Gmail to allow sending' },
+      'never@bimakavach.com': { ok: false, detail: 'never@bimakavach.com has not connected Gmail' },
     });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe('http://layer.test/email-layer/v1/health?product=placement');
-    await expect(adapter.health('other@bimakavach.com')).resolves.toEqual({ ok: true });
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('health reports not ok (never throws) on a network error or an error answer', async () => {
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    await expect(adapter.health(['pm@bimakavach.com'])).resolves.toEqual({
+      'pm@bimakavach.com': { ok: false, detail: 'Email layer unreachable: fetch failed' },
+    });
+    fetchMock.mockResolvedValue(reply(503, {}));
+    await expect(adapter.health(['pm@bimakavach.com'])).resolves.toEqual({
+      'pm@bimakavach.com': { ok: false, detail: 'Email layer health 503' },
+    });
   });
 });

@@ -346,6 +346,7 @@ function ThreadSims({ ticket: t, th }: { ticket: TicketDetail; th: ThreadView })
   const insurer = useDevAction(`/dev/tickets/${t.id}/threads/${th.id}/insurer`);
   const rm = useDevAction(`/dev/tickets/${t.id}/threads/${th.id}/rm-reply`);
   const mail = useDevAction('/dev/mail/inbound');
+  const layer = useDevAction(`/dev/tickets/${t.id}/email-layer/deliver`);
   const open = !TERMINAL.includes(th.status);
   return (
     <>
@@ -402,6 +403,20 @@ function ThreadSims({ ticket: t, th }: { ticket: TicketDetail; th: ThreadView })
               Unclear mail
             </DevSimBtn>
           )}
+          <DevSimBtn
+            disabled={layer.isPending}
+            title="A colleague answers the insurer from their own Gmail (email layer delivery): resumes a held thread, sends no mail"
+            onClick={() => layer.mutate({ threadId: th.id, kind: 'colleague' })}
+          >
+            Colleague replies from Gmail
+          </DevSimBtn>
+          <DevSimBtn
+            disabled={layer.isPending}
+            title="The insurer's mail arrives with no Placement email chain: lands in Manual Review, changes nothing"
+            onClick={() => layer.mutate({ threadId: th.id, kind: 'unanchored' })}
+          >
+            Unchained insurer mail
+          </DevSimBtn>
         </DevSimBlock>
       )}
     </>

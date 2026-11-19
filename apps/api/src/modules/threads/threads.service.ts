@@ -12,6 +12,8 @@ import {
   type ThreadEventView,
   type ThreadView,
 } from '@bimaplacement/contracts';
+import type { InboundClass } from '@bimaplacement/contracts';
+import { claimInboundMail } from '../inbound-mail/claim-mail';
 import { DomainError } from '../../common/errors/domain-error';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { Actors, type Actor } from '../audit/actor';
@@ -379,38 +381,77 @@ export class ThreadsService {
   /** FR-064 / BR-117: reply to the insurer and resume with exactly the remaining time. */
   async replyToInsurer(user: AuthUser, ticketId: string, threadId: string, text: string) {
     return this.workflow.run(ticketId, Actors.user(user), async (ctx) => {
-      const repo = ctx.manager.getRepository(InsurerThread);
-      const t = await repo.findOneByOrFail({ id: threadId, ticketId });
-      if (t.pausedSince) t.heldMins += this.sla.calendar.minutesBetween(t.pausedSince, ctx.now);
-      Object.assign(t, {
-        status: ThreadStatus.ACKNOWLEDGED,
-        pausedSince: null,
-        pauseReason: null,
-        lastEventAt: ctx.now,
-      });
-      await repo.save(t);
-      const clar = await ctx.manager
-        .getRepository(ThreadClarification)
-        .findOne({ where: { threadId }, order: { askedAt: 'DESC' } });
-      if (clar)
-        await ctx.manager
-          .getRepository(ThreadClarification)
-          .update(clar.id, { replyText: text, repliedAt: ctx.now });
+      const t = await ctx.manager.getRepository(InsurerThread).findOneByOrFail({ id: threadId, ticketId });
+      await this.resumeOnOurReply(ctx, t, text, 'app', user.name);
       await ctx.outbox({
         destination: 'mail',
         eventType: 'mail.insurer_reply',
         payload: { ticketId, threadId, text, fromUserId: ctx.ticket.ownerId },
       });
-      await ctx.manager.getRepository(ThreadEvent).insert({
-        at: ctx.now,
-        threadId,
-        kind: 'resume',
-        actorType: ctx.actor.type,
-        actorId: ctx.actor.id,
-        text: 'Reply sent to insurer · clock resumed',
-      });
-      await ctx.audit('Replied to insurer clarification', `${t.threadRef} · SLA resumed`);
     });
+  }
+
+  /**
+   * A colleague replied to the insurer from their own Gmail (shared email layer): counts as our reply, so the
+   * thread resumes exactly as an in-app reply would (FR-064), but no mail is sent. The inbound mail is claimed in
+   * this transaction, so a retried or concurrent delivery resumes the thread once.
+   */
+  async recordColleagueReply(
+    actor: Actor,
+    ticketId: string,
+    threadId: string,
+    text: string,
+    byName: string,
+    claim?: { id: string; label: InboundClass },
+  ) {
+    return this.workflow.run(ticketId, actor, async (ctx) => {
+      if (claim && !(await claimInboundMail(ctx.manager, claim, ctx.now))) return;
+      const t = await ctx.manager.getRepository(InsurerThread).findOneByOrFail({ id: threadId, ticketId });
+      if (t.status !== ThreadStatus.AWAITING_RM && t.status !== ThreadStatus.INSURER_CLARIFICATION)
+        throw DomainError.guard(`${t.threadRef} is not waiting on a reply from us`);
+      await this.resumeOnOurReply(ctx, t, text, 'gmail', byName);
+    });
+  }
+
+  /** Shared by the in-app reply and a colleague's Gmail reply: resume with the remaining time, close the clarification. */
+  private async resumeOnOurReply(
+    ctx: WorkflowContext,
+    t: InsurerThread,
+    text: string,
+    how: 'app' | 'gmail',
+    byName: string,
+  ) {
+    const threadId = t.id;
+    if (t.pausedSince) t.heldMins += this.sla.calendar.minutesBetween(t.pausedSince, ctx.now);
+    Object.assign(t, {
+      status: ThreadStatus.ACKNOWLEDGED,
+      pausedSince: null,
+      pauseReason: null,
+      lastEventAt: ctx.now,
+    });
+    await ctx.manager.getRepository(InsurerThread).save(t);
+    const clar = await ctx.manager
+      .getRepository(ThreadClarification)
+      .findOne({ where: { threadId }, order: { askedAt: 'DESC' } });
+    if (clar)
+      await ctx.manager
+        .getRepository(ThreadClarification)
+        .update(clar.id, { replyText: text, repliedAt: ctx.now });
+    await ctx.manager.getRepository(ThreadEvent).insert({
+      at: ctx.now,
+      threadId,
+      kind: 'resume',
+      actorType: ctx.actor.type,
+      actorId: ctx.actor.id,
+      text:
+        how === 'app'
+          ? 'Reply sent to insurer · clock resumed'
+          : `Replied from Gmail by ${byName} · clock resumed`,
+    });
+    await ctx.audit(
+      'Replied to insurer clarification',
+      how === 'app' ? `${t.threadRef} · SLA resumed` : `${t.threadRef} · from Gmail by ${byName}`,
+    );
   }
 
   /** Manual follow-up (same counter as the automatic ladder). */
@@ -514,9 +555,11 @@ export class ThreadsService {
     ticketId: string,
     threadId: string,
     kind: 'ack' | 'clarification' | 'decline' | 'not_applicable',
-    input: { text: string; mailId?: string },
+    input: { text: string; mailId?: string; claim?: { id: string; label: InboundClass } },
   ) {
     return this.workflow.run(ticketId, actor, async (ctx) => {
+      // inbound mail: the applied marker commits with the effect; an already applied mail is a no-op
+      if (input.claim && !(await claimInboundMail(ctx.manager, input.claim, ctx.now))) return;
       const repo = ctx.manager.getRepository(InsurerThread);
       const t = await repo.findOneByOrFail({ id: threadId, ticketId });
       switch (kind) {

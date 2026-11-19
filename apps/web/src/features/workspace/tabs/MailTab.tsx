@@ -1,8 +1,8 @@
-import { Paperclip, Search, X } from 'lucide-react';
+import { Paperclip, RotateCw, Search, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Channel, type BimaSetuMessageView, type MailView, type ThreadView } from '@bimaplacement/contracts';
-import { Avatar, FilterPills } from '@/design-system/components';
-import { useTicketSub } from '@/api/hooks';
+import { Avatar, Button, FilterPills } from '@/design-system/components';
+import { useMe, useTicketCommand, useTicketSub } from '@/api/hooks';
 import { openDocument } from '@/lib/api-client';
 import { fmtWhen } from '@/lib/format';
 import { TabHeader } from './TabHeader';
@@ -35,6 +35,8 @@ export function MailTab({ ticket: t }: TabProps) {
 
 function MailList({ ticket: t }: TabProps) {
   const { data: mails = [], isLoading } = useTicketSub<MailView[]>(t.id, 'mails');
+  const { me, isHead } = useMe();
+  const canResend = isHead || (!!me && me.id === t.owner?.id);
   const { data: threads = [] } = useTicketSub<ThreadView[]>(t.id, 'threads');
   const [party, setParty] = useState<string>('rm');
   const [q, setQ] = useState('');
@@ -114,6 +116,9 @@ function MailList({ ticket: t }: TabProps) {
                 {m.direction === 'outbound' ? `from ${m.from} to ${m.to.join(', ')}` : `from ${m.from}`}
               </div>
               <div className="mt-1 text-dense font-medium text-ink">{m.subject}</div>
+              {m.direction === 'outbound' && m.status === 'failed' && (
+                <FailedMail ticketId={t.id} mail={m} canResend={canResend} />
+              )}
               {/* bodyHtml is escaped server-side (mail handler / inbound recorder) */}
               <div
                 className="mt-1 text-dense text-ink-2 [&_p+p]:mt-2"
@@ -141,6 +146,31 @@ function MailList({ ticket: t }: TabProps) {
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/** A mail that was not sent (Gmail not connected, or refused): the reason, and Resend for the owner / Head. */
+function FailedMail({ ticketId, mail, canResend }: { ticketId: string; mail: MailView; canResend: boolean }) {
+  const resend = useTicketCommand(ticketId, 'POST', `/mails/${mail.id}/resend`);
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      <span className="text-meta text-t-red">Not sent{mail.error ? `: ${mail.error}` : ''}</span>
+      {mail.resent ? (
+        <span className="text-meta text-ink-2">Resent</span>
+      ) : (
+        canResend && (
+          <Button
+            size="sm"
+            icon={<RotateCw size={12} />}
+            disabled={resend.isPending}
+            onClick={() => resend.mutate(undefined)}
+          >
+            Resend
+          </Button>
+        )
+      )}
+      {resend.error && <span className="text-meta text-t-red">{(resend.error as Error).message}</span>}
     </div>
   );
 }

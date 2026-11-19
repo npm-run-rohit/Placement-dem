@@ -14,11 +14,20 @@ export function productionProblems(c: AppConfig): string[] {
     problems.push('MALWARE_SCANNER=dev only detects the EICAR test file; use clamav');
   if (c.bimasetu.mode === 'live' && !c.bimasetu.webhookSecret)
     problems.push('BIMASETU_WEBHOOK_SECRET is required to verify inbound BimaSetu messages');
-  if (c.mailbox.driver === 'email-layer') {
-    if (!c.mailbox.emailLayer.url)
-      problems.push('EMAIL_LAYER_URL is required when MAILBOX_DRIVER=email-layer');
-    if (!c.mailbox.emailLayer.secret)
-      problems.push('EMAIL_LAYER_SECRET is required when MAILBOX_DRIVER=email-layer');
-  }
+  if (c.mailbox.driver === 'email-layer' && !c.mailbox.emailLayer.url)
+    problems.push('EMAIL_LAYER_URL is required when MAILBOX_DRIVER=email-layer');
+  // The delivery webhook is live whatever the driver (ruling R3), so its secret is always checked.
+  if (weakSecret(c.mailbox.emailLayer.secret))
+    problems.push(
+      `EMAIL_LAYER_SECRET must be a real secret of at least ${MIN_SECRET_LENGTH} characters (not the .env.example value)`,
+    );
   return problems;
+}
+
+const MIN_SECRET_LENGTH = 32;
+/** The apps/api/.env.example value, and anything still marked as a placeholder. */
+const PLACEHOLDER = /change-me|^dev-email-layer-secret/i;
+
+function weakSecret(secret: string): boolean {
+  return !secret || secret.length < MIN_SECRET_LENGTH || PLACEHOLDER.test(secret);
 }

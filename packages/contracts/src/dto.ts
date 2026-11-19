@@ -311,6 +311,10 @@ export interface MailView {
   attachments: Array<{ id: string; fileName: string }>;
   rfqLinkInBody: boolean;
   status: string;
+  /** Why a `failed` mail was not sent. */
+  error: string | null;
+  /** A failed mail that was already sent again (POST /tickets/:id/mails/:mailId/resend). */
+  resent: boolean;
   at: string;
 }
 
@@ -414,7 +418,21 @@ export type EditableLookupKind = (typeof EDITABLE_LOOKUP_KINDS)[number];
 export const DERIVED_SLA_IDS: readonly SlaId[] = ['SLA-06', 'SLA-07', 'SLA-08', 'SLA-09'] as SlaId[];
 
 /** GET /masters/admin (PLAN 4.2, FR-139..148, FR-270): everything the Admin screens edit, incl. retired values. */
+/** One placement user's mailbox as the mailbox connector reports it (Admin, read-only). `unknown` = the status could not be read. */
+export interface MailboxStatusView {
+  userName: string;
+  email: string;
+  mailbox: string;
+  status: 'connected' | 'not_connected' | 'unknown';
+  detail: string | null;
+}
+
 export interface AdminMastersView {
+  /**
+   * null when MAILBOX_DRIVER is `dev` (there are no real mailboxes to report). Absent from save responses
+   * (mailbox status is only read on GET /masters/admin); keep the value you already have.
+   */
+  mailboxes?: MailboxStatusView[] | null;
   sla: Array<{
     id: SlaId;
     touchpoint: string;

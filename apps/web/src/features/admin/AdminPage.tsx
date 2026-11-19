@@ -10,13 +10,15 @@ import {
   CalendarSection,
   EscalationSection,
   ListsSection,
+  MailboxesSection,
   MatrixSection,
   ProductTypesSection,
   SlaSection,
   TemplatesSection,
 } from './sections';
 
-type TabKey = 'sla' | 'matrix' | 'calendar' | 'escalation' | 'lists' | 'templates' | 'products' | 'log';
+type TabKey =
+  'sla' | 'matrix' | 'calendar' | 'escalation' | 'lists' | 'templates' | 'products' | 'mailboxes' | 'log';
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'sla', label: 'SLA Master' },
   { key: 'matrix', label: 'Quote Collection Matrix' },
@@ -25,6 +27,7 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: 'lists', label: 'Reason Lists' },
   { key: 'templates', label: 'Templates' },
   { key: 'products', label: 'Product Types' },
+  { key: 'mailboxes', label: 'Mailboxes' },
   { key: 'log', label: 'Change Log' },
 ];
 
@@ -36,13 +39,14 @@ const TABS: Array<{ key: TabKey; label: string }> = [
 export function AdminPage() {
   const { canAdmin, isLoading: meLoading } = useMe();
   const [params, setParams] = useSearchParams();
-  const tab = TABS.find((t) => t.key === params.get('tab'))?.key ?? 'sla';
-  const setTab = (k: TabKey) => setParams({ tab: k }, { replace: true });
   const { data, isLoading, error } = useQuery({
     enabled: canAdmin,
     queryKey: ['masters', 'admin'],
     queryFn: () => api<AdminMastersView>('/masters/admin'),
   });
+  const tabs = data?.mailboxes ? TABS : TABS.filter((x) => x.key !== 'mailboxes'); // the dev driver has no real mailboxes
+  const tab = tabs.find((t) => t.key === params.get('tab'))?.key ?? 'sla';
+  const setTab = (k: TabKey) => setParams({ tab: k }, { replace: true });
   const { data: changes = [] } = useQuery({
     enabled: canAdmin && tab === 'log',
     queryKey: ['masters', 'change-log'],
@@ -63,7 +67,7 @@ export function AdminPage() {
         />
       ) : (
         <>
-          <Tabs items={TABS} value={tab} onChange={setTab} />
+          <Tabs items={tabs} value={tab} onChange={setTab} />
           <div className="pt-5">
             {(isLoading || meLoading) && <div className="text-dense text-ink-2">Loading…</div>}
             {error && <div className="text-dense text-t-red">{(error as Error).message}</div>}
@@ -74,6 +78,7 @@ export function AdminPage() {
             {data && tab === 'lists' && <ListsSection view={data} />}
             {data && tab === 'templates' && <TemplatesSection view={data} />}
             {data && tab === 'products' && <ProductTypesSection view={data} />}
+            {data?.mailboxes && tab === 'mailboxes' && <MailboxesSection view={data} />}
             {tab === 'log' && (
               <section className="rounded-xl border-[0.5px] border-line p-4">
                 <ChangeLogList changes={changes} limit={100} />

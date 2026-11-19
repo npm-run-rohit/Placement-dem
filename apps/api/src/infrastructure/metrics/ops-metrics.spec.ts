@@ -10,6 +10,8 @@ const snapshot: OpsSnapshot = {
   review: { unmatched: 7, myReviews: 2 },
   copycatFailedLast15Min: 1,
   bimasetu: { inboundRetrying: 0, inboundRejectedLastHour: 5 },
+  emailLayerInboundFailedLastHour: 4,
+  mailNotSentLastHour: 2,
 };
 
 describe('opsMetricData', () => {
@@ -25,6 +27,7 @@ describe('opsMetricData', () => {
     expect(value('MyReviewsPending')).toBe(2);
     expect(value('CopycatFailures15m')).toBe(1);
     expect(value('BimaSetuInboundRejected1h')).toBe(5);
+    expect(value('MailNotSent1h')).toBe(2);
   });
 
   it('reports each heartbeat by job, a job that never ran as a day old', () => {

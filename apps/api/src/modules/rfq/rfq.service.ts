@@ -1,7 +1,8 @@
-import type { RfqQueryView, RfqVersionView } from '@bimaplacement/contracts';
+import type { InboundClass, RfqQueryView, RfqVersionView } from '@bimaplacement/contracts';
+import { claimInboundMail } from '../inbound-mail/claim-mail';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { BimaSetuOutboundType, Channel, RfqStatus, Stage, TicketCommand } from '@bimaplacement/contracts';
 import { DomainError } from '../../common/errors/domain-error';
 import type { AuthUser } from '../../common/auth/auth.types';
@@ -147,15 +148,34 @@ export class RfqService {
   async recordRmAnswer(
     actor: Actor,
     ticketId: string,
-    input: { queryRef?: string; text: string; answeredBy: string },
+    input: {
+      queryRef?: string;
+      text: string;
+      answeredBy: string;
+      /** Inbound RM mail: its applied marker commits with the answer, so a retried delivery answers once. */
+      claim?: { id: string; label: InboundClass };
+      /** RM mail (no Q-nn): the text answers every open, unanswered query on the active RFQ version; none is resolved (BR-111). */
+      answerOpenQueries?: boolean;
+    },
   ) {
     return this.workflow.run(ticketId, actor, async (ctx) => {
+      if (input.claim && !(await claimInboundMail(ctx.manager, input.claim, ctx.now))) return;
       const repo = ctx.manager.getRepository(RfqQuery);
       if (input.queryRef) {
         const q = await repo.findOne({ where: { ticketId, ref: input.queryRef } });
         if (!q) throw DomainError.notFound('Query', input.queryRef);
         Object.assign(q, { answer: input.text, answeredAt: ctx.now, answeredBy: input.answeredBy });
         await repo.save(q);
+      }
+      if (input.answerOpenQueries && !input.queryRef) {
+        const rfq = await ctx.manager
+          .getRepository(RfqVersion)
+          .findOneOrFail({ where: { ticketId, version: ctx.ticket.activeRfqVersion } });
+        const open = await repo.find({
+          where: { rfqVersionId: rfq.id, resolved: false, answer: IsNull() },
+        });
+        for (const q of open)
+          await repo.update(q.id, { answer: input.text, answeredAt: ctx.now, answeredBy: input.answeredBy });
       }
       if (ctx.ticket.stage === Stage.AWAITING_RM) ctx.moveTo(Stage.RFQ_REVIEW, TicketCommand.RM_ANSWERED);
       await ctx.audit(

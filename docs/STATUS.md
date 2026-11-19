@@ -41,6 +41,7 @@ Everything marked built runs against the real API and database and is covered by
 - QCR quote rows autofill from Copycat's comparison (and the quote record for single-quote / manual QCRs); each cell shows "From QCR" / "Edited" and can be put back. Floated tickets close from BimaSetu's client confirmation or line lost (dev simulators on the QCR tab).
 - RFQ review, queries to the RM, risk tier, validation; insurer selection with Do Not Float / inactive / incumbent blocks; float with one thread per insurer + branch.
 - Outbound insurer and RM mail from the assigned PM's mailbox (Mailpit locally), follow-up ladder, thread clock hold for RM information.
+- Shared email layer (dev): `MAILBOX_DRIVER=email-layer` sends through it and takes inbound mail from its signed webhook. A colleague's own Gmail reply on a waiting thread resumes it like an in-app reply and sends no mail; mail with no Placement chain goes to Manual Review. Dev simulator buttons on a thread ("Colleague replies from Gmail", "Unchained insurer mail") post signed deliveries through the real webhook handler. Admin has a read-only Mailboxes tab (hidden on the dev driver).
 - Quotes: usable / clarification / excluded, threshold of 3 insurer companies → Copycat draft QCR (mock mode), early release, manual QCR upload.
 - Mandates: Exclusive Placement and Incumbent Approach.
 - Revision rounds: a revision opens a PM task and contacts no insurer; Restart threads / Add an insurer / New RFQ version from the QCR tab mark it handled and close the task (3.5, FR-250).
@@ -52,7 +53,7 @@ Everything marked built runs against the real API and database and is covered by
 |---|---|---|
 | BimaSetu | Outbound sender, reconciliation; inbound built to the draft contract (see [integration guide](integration/BIMASETU-INTEGRATION.md)) | Wire format with the BimaSetu team |
 | Copycat | Live client (mock works end to end) | Copycat API |
-| Mailbox | Sending and reading through the shared email layer (dev SMTP works) | Email layer design (in progress) |
+| Mailbox | Client for the shared email layer is built to [its contract](integration/EMAIL-LAYER-CONTRACT.md): signed sends as the assigned PM, signed delivery webhook, sender rules, colleague Gmail replies, Admin Mailboxes status (dev SMTP still the default). Live use waits on the email layer being deployed and PMs connecting Gmail | Email layer deployment (parser repo) |
 | Identity | Sahayak token + shell handshake (dev header auth works) | Sahayak contract |
 | Masters | Excel import of the Insurer Master; extra routing fields (FR-163); mailbox connector and Copycat settings screens | Masters workbook; mailbox / Copycat decisions |
 | Reports | Read replica for reporting queries | Not started (add to the CDK data stack) |

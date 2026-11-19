@@ -10,6 +10,10 @@ export interface OpsSnapshot {
   review: { unmatched: number; myReviews: number };
   copycatFailedLast15Min: number;
   bimasetu: { inboundRetrying: number; inboundRejectedLastHour: number };
+  /** Email layer deliveries that failed (attachment URL, database) in the last hour, awaiting the layer's retry. */
+  emailLayerInboundFailedLastHour: number;
+  /** Outbound mail stored as failed in the last hour (mailbox not connected, or refused): never retried by a job. */
+  mailNotSentLastHour: number;
 }
 
 /** Jobs expected to heartbeat; a missing row reads as "never ran" so the stall alarm fires on a new stack. */
@@ -49,5 +53,7 @@ export function opsMetricData(s: OpsSnapshot): MetricDatum[] {
     count('CopycatFailures15m', s.copycatFailedLast15Min),
     count('BimaSetuInboundRetrying', s.bimasetu.inboundRetrying),
     count('BimaSetuInboundRejected1h', s.bimasetu.inboundRejectedLastHour),
+    count('EmailLayerInboundFailed1h', s.emailLayerInboundFailedLastHour),
+    count('MailNotSent1h', s.mailNotSentLastHour),
   ];
 }

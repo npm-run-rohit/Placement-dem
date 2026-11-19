@@ -6,13 +6,14 @@ This file is identical in both repos. The TypeScript in `contract.ts` is identic
 
 ## Rules
 
-- **Send as the assigned user only (M5).** A sender with no connected, send-enabled mailbox gets 409 `MAILBOX_NOT_CONNECTED`. Final: no retry, no fallback sender.
+- **Send as the assigned user only (M5).** A sender with no connected, send-enabled mailbox for this product gets 409 `MAILBOX_NOT_CONNECTED`. Final: no retry, no fallback sender. A mailbox sends for a product only after it connected for that product (`/email-parser/connect/gmail?product=placement`, which also grants `gmail.send`) or an admin assigned it the product; a revoked grant or missing scope is also `MAILBOX_NOT_CONNECTED`.
 - **Conversation refs:** `PLC-nnnn/TH-nn` for insurer threads, `PLC-nnnn/RM` for RM mail on manual tickets. Tag pattern `/\bPLC-\d{4,}\b/`.
 - **Unanchored mail** (`conversationRef: null`) always goes to Manual Review and is never auto-applied (BR-046).
 - **Idempotency:** a send repeated with the same `idempotencyKey` returns the original `SendResponse`. A delivery repeated with the same `deliveryId` is answered 2xx with no effect.
+- **Send failures:** if Gmail gives no answer or a 5xx, the layer answers 503 and the next call with the same key first searches the mailbox for the mail's Message-ID (no 15-minute wait), so a retry never sends twice. A Gmail rate limit is 503 too. A definite Gmail refusal (bad recipient, too large) is 422 `SEND_REJECTED`: final, do not retry.
 - **Own sends are not deliveries.** A message the layer sent for the product is never delivered back, even though it shows in the sender's SENT label.
 - **One delivery per message.** A message seen in several connected mailboxes (CC'd colleagues) is delivered once, deduplicated on `rfcMessageId`; all mailboxes are listed in `seenInMailboxes`.
-- **Staff messages:** `sentByStaff: true` marks a message sent by a connected colleague (not by the product and not by an external party).
+- **Staff messages:** `sentByStaff: true` marks a message sent by a connected colleague (not by the product and not by an external party). It answers the insurer only when at least one To/Cc address is not staff; a staff-only mail is kept on the trail.
 - **Attachments** are passed as time-limited URLs. If a URL has expired when the product fetches it, the product answers 5xx so the layer retries with fresh URLs. The product never stores the mail without its attachments.
 
 ## Signature
@@ -72,15 +73,27 @@ export interface DeliveryPayload {
     attachments: Array<{ fileName: string; contentType: string; size: number; url: string }>;
   };
 }
+
+export interface HealthResponse {
+  ok: boolean;
+  connected: string[];            // the product's mailboxes that can send
+  mailboxesWithoutSend: string[]; // the product's mailboxes that must reconnect to grant gmail.send
+}
+
+export type SendErrorCode = 'MAILBOX_NOT_CONNECTED' | 'SEND_IN_PROGRESS' | 'SEND_REJECTED';
 ```
 
 ## Endpoints
 
 | Call | Answers |
 |---|---|
-| `POST /email-layer/v1/messages` (product to layer) | 200 `SendResponse`; 401 bad signature; 409 `{ "code": "MAILBOX_NOT_CONNECTED" }`; 422 bad request |
-| `GET /email-layer/v1/health?product=placement` | `{ "ok": boolean, "mailboxesWithoutSend": string[] }` |
-| `POST <product webhook>` (layer to product) | 2xx delivered; 4xx rejected (final); 5xx or timeout retried |
+| `POST /email-layer/v1/messages` (product to layer) | 200 `SendResponse`; 401 bad signature; 409 `{ "code": "MAILBOX_NOT_CONNECTED" }` (final); 409 `{ "code": "SEND_IN_PROGRESS" }` (retry); 422 `{ "code": "SEND_REJECTED" }` (final); 422 an attachment URL could not be fetched (retry with fresh URLs); 503 Gmail unavailable or rate limited (retry) |
+| `GET /email-layer/v1/health?product=placement` | `HealthResponse`. A user in neither list has not connected at all. |
+| `POST <product webhook>` (layer to product) | 2xx delivered; 4xx rejected (final), except 401, 404, 408 and 429, which are retried like 5xx and timeouts |
+
+Product webhook: Placement's is `POST <placement api>/api/v1/integrations/email-layer/webhook` (the `webhookUrl` of the `placement` entry in the layer's `EMAIL_LAYER_PRODUCTS`).
+
+Retries: 8 attempts with exponential backoff. A delivery that ends failed or rejected keeps its payload and can be retried by an admin (`POST /email-layer/v1/admin/deliveries/retry`); a delivered one drops its full text and HTML.
 
 When a reply is sent from a mailbox that has no Gmail thread for the conversation (for example after a ticket is reassigned),
 the layer sends with `In-Reply-To` / `References` and no Gmail `threadId`; the conversation stays the same.
@@ -113,6 +126,16 @@ the layer sends with `In-Reply-To` / `References` and no Gmail `threadId`; the c
   "gmailMessageId": "18c0a1b2c3d4e5f6",
   "gmailThreadId": "18c0a1b2c3d4e5f0",
   "sentAt": "2026-11-04T09:30:00.000Z"
+}
+```
+
+### Health response
+
+```json
+{
+  "ok": true,
+  "connected": ["bhupendra@bimakavach.com"],
+  "mailboxesWithoutSend": ["colleague@bimakavach.com"]
 }
 ```
 

@@ -59,6 +59,14 @@ export class OpsMetricsHandler implements JobHandler {
               count(*) FILTER (WHERE status = 'rejected' AND created_at > now() - interval '1 hour')::int AS rejected
          FROM bimasetu_messages WHERE direction = 'in'`,
     );
+    const emailLayer = await one(
+      `SELECT count(*)::int AS failed FROM email_layer_deliveries
+        WHERE status = 'failed' AND created_at > now() - interval '1 hour'`,
+    );
+    const notSent = await one(
+      `SELECT count(*)::int AS n FROM mail_messages
+        WHERE direction = 'outbound' AND status = 'failed' AND at > now() - interval '1 hour'`,
+    );
     const failedJobs: Record<string, number | null> = {};
     for (const queue of Object.values(QUEUES))
       failedJobs[queue] = this.driver.failedCount ? await this.driver.failedCount(queue) : null;
@@ -73,6 +81,8 @@ export class OpsMetricsHandler implements JobHandler {
       review: { unmatched: review.unmatched, myReviews: review.mine },
       copycatFailedLast15Min: copycat.n,
       bimasetu: { inboundRetrying: bimasetu.retrying, inboundRejectedLastHour: bimasetu.rejected },
+      emailLayerInboundFailedLastHour: emailLayer.failed,
+      mailNotSentLastHour: notSent.n,
     };
   }
 }

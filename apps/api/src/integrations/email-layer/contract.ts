@@ -1,8 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /**
- * Email layer contract v1 (docs/integration/EMAIL-LAYER-CONTRACT.md).
- * Identical copy lives in email-parser-scaffold: email-parser/email-layer/contract.ts.
+ * Email layer contract v1. This file is identical, byte for byte, in both repos:
+ * bimaplacement apps/api/src/integrations/email-layer/contract.ts and
+ * email-parser-scaffold email-parser/email-layer/contract.ts. The contract doc is identical too:
+ * bimaplacement docs/integration/EMAIL-LAYER-CONTRACT.md and email-parser-scaffold docs/email-layer-contract.md.
  */
 export interface SendRequest {
   product: string;
@@ -45,6 +47,21 @@ export interface DeliveryPayload {
     attachments: Array<{ fileName: string; contentType: string; size: number; url: string }>;
   };
 }
+
+/** GET /email-layer/v1/health?product=<name>. Anyone listed in neither array has not connected at all. */
+export interface HealthResponse {
+  ok: boolean;
+  /** Active mailboxes of the product that can send (connected with the gmail.send scope). */
+  connected: string[];
+  /** Active mailboxes of the product that cannot send yet (they must reconnect to grant gmail.send). */
+  mailboxesWithoutSend: string[];
+}
+
+/**
+ * `code` in the body of an error answer to POST /email-layer/v1/messages.
+ * MAILBOX_NOT_CONNECTED (409) and SEND_REJECTED (422) are final; SEND_IN_PROGRESS (409) is retried.
+ */
+export type SendErrorCode = 'MAILBOX_NOT_CONNECTED' | 'SEND_IN_PROGRESS' | 'SEND_REJECTED';
 
 export const SIGNATURE_HEADER = 'x-email-layer-signature';
 

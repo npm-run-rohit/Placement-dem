@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { QuoteDecision, Stage, ThreadStatus, TicketCommand, type QuoteView } from '@bimaplacement/contracts';
+import type { InboundClass } from '@bimaplacement/contracts';
+import { claimInboundMail } from '../inbound-mail/claim-mail';
 import { DomainError } from '../../common/errors/domain-error';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { Actors, type Actor } from '../audit/actor';
@@ -77,9 +79,16 @@ export class QuotesService {
     actor: Actor,
     ticketId: string,
     threadId: string,
-    input: { documentId: string; contentHash?: string; mailId?: string },
+    input: {
+      documentId: string;
+      contentHash?: string;
+      mailId?: string;
+      claim?: { id: string; label: InboundClass };
+    },
   ) {
     return this.workflow.run(ticketId, actor, async (ctx) => {
+      // inbound mail: the applied marker commits with the effect; an already applied mail is a no-op
+      if (input.claim && !(await claimInboundMail(ctx.manager, input.claim, ctx.now))) return null;
       const thread = await ctx.manager
         .getRepository(InsurerThread)
         .findOneByOrFail({ id: threadId, ticketId });

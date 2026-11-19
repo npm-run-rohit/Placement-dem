@@ -20,6 +20,7 @@ export const E2E_ENV = {
   COPYCAT_MODE: 'mock',
   COPYCAT_MOCK_DELAY_MS: '0',
   MAILBOX_DRIVER: 'dev',
+  EMAIL_LAYER_SECRET: 'e2e-email-layer-secret', // the webhook refuses every call without a secret
   SMTP_HOST: '', // dev mailbox logs instead of sending (no Mailpit in CI)
   FEATURE_DEV_SIMULATORS: 'true',
   SAHAYAK_NOTIFICATIONS_ENABLED: 'false',

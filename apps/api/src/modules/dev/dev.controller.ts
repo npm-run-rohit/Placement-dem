@@ -1,6 +1,8 @@
 import { Body, Controller, ForbiddenException, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiTags } from '@nestjs/swagger';
+import { DataSource } from 'typeorm';
+import type { Request } from 'express';
 import { RevisionAsk, RevisionBy } from '@bimaplacement/contracts';
 import type { AppConfig } from '../../config/configuration';
 import { Clock } from '../../common/time/clock';
@@ -14,6 +16,9 @@ import { SlaConfigService } from '../sla/sla-config.service';
 import { SlaSweeperHandler } from '../automation/sla-sweeper.handler';
 import { InboundMailService } from '../inbound-mail/inbound-mail.service';
 import { DecisionsService } from '../decisions/decisions.service';
+import { randomUUID } from 'node:crypto';
+import { signEmailLayer, type DeliveryPayload } from '../../integrations/email-layer/contract';
+import { EmailLayerWebhookController } from '../../integrations/email-layer/email-layer-webhook.controller';
 import { DevSimulatorService, type InsurerSimKind } from './dev-simulator.service';
 import { DevJourneyService, type JourneyUntil } from './dev-journey.service';
 import type { FloatPreset } from './float-presets';
@@ -25,6 +30,7 @@ import type { FloatPreset } from './float-presets';
  *  - POST /dev/clock/reset                          -> back to real time
  *  - POST /dev/mail/inbound          InboundMailRaw  -> as if the insurer/RM replied
  *  - POST /dev/tickets/:id/revision  {by, reason, asks} -> as if BimaSetu sent a revision_request
+ *  - POST /dev/tickets/:id/email-layer/deliver {threadId, kind} -> a signed email layer delivery through the real webhook handler
  *  - POST /dev/tickets/:id/simulate/next | run, /dev/simulate/journey -> journey simulator (demo)
  */
 @ApiTags('dev')
@@ -41,6 +47,8 @@ export class DevController {
     private readonly decisions: DecisionsService,
     private readonly sim: DevSimulatorService,
     private readonly journey: DevJourneyService,
+    private readonly emailLayer: EmailLayerWebhookController,
+    private readonly ds: DataSource,
   ) {}
 
   private guard() {
@@ -216,6 +224,82 @@ export class DevController {
   ) {
     this.guard();
     return this.sim.bimasetuMessage(id, type, payload);
+  }
+
+  /**
+   * Shared email layer (dev): builds a delivery for a thread, signs it with EMAIL_LAYER_SECRET and hands it to the
+   * webhook controller's own handler (signature check, shape check, dedupe, inbound routing), so nothing is
+   * bypassed. kind: insurer (first POC, in the thread's conversation) | colleague (a placement colleague's own
+   * Gmail reply, sentByStaff) | unanchored (first POC, no conversation, subject carries the tag; BR-046).
+   * Dev data: addresses come from the thread's POCs and the users table; wording is a dev fixture.
+   */
+  @Post('tickets/:id/email-layer/deliver')
+  async emailLayerDeliver(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { threadId: string; kind: 'insurer' | 'colleague' | 'unanchored' },
+  ) {
+    this.guard();
+    if (!['insurer', 'colleague', 'unanchored'].includes(body?.kind))
+      throw DomainError.guard('kind must be one of insurer, colleague, unanchored');
+    const [row] = await this.ds.query(
+      `SELECT t.ticket_no, th.thread_ref, th.pocs, u.email AS owner_email, u.mailbox_address
+         FROM insurer_threads th JOIN placement_tickets t ON t.id = th.ticket_id
+         LEFT JOIN users u ON u.id = t.owner_id
+        WHERE th.id = $1 AND th.ticket_id = $2`,
+      [body.threadId, id],
+    );
+    if (!row) throw DomainError.notFound('Thread', String(body.threadId));
+    const pocs = (row.pocs ?? []) as Array<{ email: string }>;
+    const mailbox: string = row.mailbox_address ?? row.owner_email ?? 'placement@bimakavach.com';
+    let from = pocs[0]?.email ?? 'insurer@example.test';
+    if (body.kind === 'colleague') {
+      // another placement user when there is one, otherwise the owner (the owner's own Gmail reply counts too)
+      const [other] = await this.ds.query(
+        `SELECT email FROM users WHERE roles && ARRAY['placement_manager','placement_head']::text[] AND lower(email) <> lower($1) ORDER BY email LIMIT 1`,
+        [row.owner_email ?? ''],
+      );
+      from = other?.email ?? row.owner_email ?? 'placement@bimakavach.com';
+    }
+    const now = this.clock.now();
+    const tag = `${row.ticket_no} | ${row.thread_ref}`;
+    const n = `${now.getTime()}-${randomUUID().slice(0, 8)}`;
+    const payload: DeliveryPayload = {
+      deliveryId: `dev-el-${n}`,
+      product: 'placement',
+      conversationRef: body.kind === 'unanchored' ? null : `${row.ticket_no}/${row.thread_ref}`,
+      rootMessageId: `<dev-el-root-${n}@email-layer.example.test>`,
+      message: {
+        rfcMessageId: `<dev-el-${n}@email-layer.example.test>`,
+        inReplyTo: null,
+        references: [],
+        from,
+        to: body.kind === 'colleague' ? pocs.map((p) => p.email) : [mailbox],
+        cc: [],
+        subject:
+          body.kind === 'unanchored'
+            ? `Fwd: [${tag}] RFQ`
+            : body.kind === 'colleague'
+              ? `Re: [${tag}] RFQ`
+              : `RE: [${tag}] RFQ`,
+        textBody:
+          body.kind === 'colleague'
+            ? 'Shared the claims history with the insurer from my Gmail (simulated).'
+            : 'Noted. We will revert on this shortly (simulated).',
+        htmlBody: null,
+        sentAt: now.toISOString(),
+        seenInMailboxes: [body.kind === 'colleague' ? from : mailbox],
+        sentByStaff: body.kind === 'colleague',
+        attachments: [],
+      },
+    };
+    const raw = JSON.stringify(payload);
+    const cfg = this.config.get('mailbox', { infer: true }).emailLayer;
+    const outcome = await this.emailLayer.receive(
+      { rawBody: Buffer.from(raw, 'utf8'), ip: 'dev-simulator' } as unknown as Request & { rawBody?: Buffer },
+      signEmailLayer(raw, cfg.secret),
+      payload,
+    );
+    return { ...outcome, deliveryId: payload.deliveryId, rfcMessageId: payload.message.rfcMessageId };
   }
 
   /** Journey simulator (demo): ONE next step from the ticket's current state, through the real services. */

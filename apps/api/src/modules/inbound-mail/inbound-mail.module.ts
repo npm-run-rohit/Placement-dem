@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommunicationsModule } from '../communications/communications.module';
 import { DocumentsModule } from '../documents/documents.module';
+import { RfqModule } from '../rfq/rfq.module';
 import { QuotesModule } from '../quotes/quotes.module';
 import { ThreadsModule } from '../threads/threads.module';
 import { TicketsModule } from '../tickets/tickets.module';
@@ -17,6 +18,7 @@ import { MAIL_CLASSIFIER, RulesMailClassifier } from './classifier.port';
     CommunicationsModule,
     DocumentsModule,
     QuotesModule,
+    RfqModule,
     ThreadsModule,
     TicketsModule,
   ],

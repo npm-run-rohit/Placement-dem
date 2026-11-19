@@ -30,6 +30,7 @@ Production web build: `npm run build -w @bimaplacement/web` (static files in `ap
 ## Docs
 
 - [Build status](./docs/STATUS.md) - what works today, what is pending and why
+- [Email layer contract](./docs/integration/EMAIL-LAYER-CONTRACT.md) - signed send and delivery webhook between Placement and the shared email layer
 - [BimaSetu integration guide](./docs/integration/BIMASETU-INTEGRATION.md) - message contract, webhook, open points (for the BimaSetu team)
 - [PLAN.md](./PLAN.md) - phased build plan (Claude Code works from this)
 - [CLAUDE.md](./CLAUDE.md) - rules and commands for Claude Code

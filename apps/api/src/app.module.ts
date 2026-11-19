@@ -18,6 +18,7 @@ import { MailModule } from './infrastructure/mail/mail.module';
 import { SahayakModule } from './integrations/sahayak/sahayak.module';
 import { SahayakAuthGuard } from './integrations/sahayak/sahayak-auth.guard';
 import { BimaSetuModule } from './integrations/bimasetu/bimasetu.module';
+import { EmailLayerModule } from './integrations/email-layer/email-layer.module';
 import { CopycatModule } from './integrations/copycat/copycat.module';
 import { UsersModule } from './modules/users/users.module';
 import { AuditModule } from './modules/audit/audit.module';
@@ -86,6 +87,7 @@ export const CORE_IMPORTS = [
   TasksModule,
   ReportingModule,
   BimaSetuModule,
+  EmailLayerModule,
   CopycatModule,
 ];
 

@@ -143,6 +143,14 @@ export class MonitoringStack extends Stack {
         comparison: GTE,
       },
       {
+        id: 'MailNotSent',
+        runbook: 'mail-send-failures',
+        summary: 'Insurer / RM mail was not sent: the PM mailbox is not connected, or Gmail refused the mail',
+        metric: appMetric('MailNotSent1h'),
+        threshold: 1,
+        comparison: GTE,
+      },
+      {
         id: 'UnmatchedMailBacklog',
         runbook: 'unmatched-mail-backlog',
         summary: '25+ inbound mails waiting in the Unmatched queue for an hour',
@@ -174,6 +182,15 @@ export class MonitoringStack extends Stack {
         summary: '5+ BimaSetu messages refused in the last hour (contract drift?)',
         metric: appMetric('BimaSetuInboundRejected1h'),
         threshold: 5,
+        comparison: GTE,
+      },
+      {
+        id: 'EmailLayerInboundFailing',
+        runbook: 'email-layer-inbound',
+        summary:
+          '3+ email layer deliveries failed in the last hour (attachment URLs or database); replies are not arriving',
+        metric: appMetric('EmailLayerInboundFailed1h'),
+        threshold: 3,
         comparison: GTE,
       },
       // ---- Services ----

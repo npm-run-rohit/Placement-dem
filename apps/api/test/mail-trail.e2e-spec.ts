@@ -1,5 +1,10 @@
 import { RiskTier, INDUSTRY_TYPES_SEED, PRODUCT_TYPES_SEED } from '@bimaplacement/contracts';
 import { DataSource } from 'typeorm';
+import { MAILBOX, type MailboxConnector } from '../src/infrastructure/mail/mailbox.port';
+import {
+  MailboxNotConnectedError,
+  MailRejectedError,
+} from '../src/infrastructure/mail/email-layer-mailbox.adapter';
 import { MailOutboundHandler } from '../src/modules/communications/mail-outbound.handler';
 import { TEST_USERS, TestApp, as, createTestApp } from './helpers/app';
 
@@ -12,6 +17,7 @@ describe('Mail Trail', () => {
   let ticketNo: string;
   let insurerId: string;
   let branchId: string;
+  let sendSpy: jest.SpyInstance;
 
   /** What the worker does: relay each unpublished mail outbox row to the mail handler. */
   const deliver = async () => {
@@ -41,6 +47,7 @@ describe('Mail Trail', () => {
     t = await createTestApp();
     ds = t.app.get(DataSource);
     pm = as(t, TEST_USERS.pm);
+    sendSpy = jest.spyOn(t.app.get<MailboxConnector>(MAILBOX), 'send');
 
     // E2E FIXTURE - mock RM and one insurer branch with two POCs (not PRD data)
     const [{ id: rmUserId }] = await ds.query(
@@ -142,6 +149,141 @@ describe('Mail Trail', () => {
       status: 'received',
     });
     expect(latest.attachments[0].fileName).toMatch(/\.pdf$/);
+  });
+
+  it('the first float mail starts the conversation, the follow-up continues it', async () => {
+    const [thread] = (await pm.get(`/tickets/${ticketId}/threads`).expect(200)).body;
+    const floatCall = sendSpy.mock.calls
+      .map(([m]) => m)
+      .find((m) => m.conversation?.ref === `${ticketNo}/TH-01`);
+    expect(floatCall.conversation).toEqual({ ref: `${ticketNo}/TH-01` });
+    expect(floatCall.idempotencyKey).toEqual(expect.any(String));
+    const [floatRow] = await ds.query(
+      `SELECT provider_message_id, conversation_ref FROM mail_messages WHERE outbox_id = $1`,
+      [floatCall.idempotencyKey],
+    );
+    expect(floatRow.conversation_ref).toBe(`${ticketNo}/TH-01`);
+
+    sendSpy.mockClear();
+    await pm.post(`/tickets/${ticketId}/threads/${thread.id}/follow-up`, {}).expect(201);
+    await deliver();
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0][0].conversation).toEqual({
+      ref: `${ticketNo}/TH-01`,
+      replyToMessageId: floatRow.provider_message_id,
+    });
+  });
+
+  it('a mailbox that is not connected fails the mail once, notifies the owner, no retry', async () => {
+    sendSpy.mockClear();
+    sendSpy.mockRejectedValueOnce(new MailboxNotConnectedError('pm.e2e@bimakavach.test'));
+    const [{ n: before }] = await ds.query(
+      `SELECT count(*)::int AS n FROM mail_messages WHERE ticket_id = $1`,
+      [ticketId],
+    );
+    const [{ id: outboxId }] = await ds.query(
+      `INSERT INTO outbox_events (destination, event_type, aggregate_type, aggregate_id, payload)
+       VALUES ('mail', 'mail.rm_queries', 'ticket', $1, $2) RETURNING id`,
+      [ticketId, JSON.stringify({ ticketId, queryIds: [], message: 'Please resend' })],
+    );
+    const job = { outboxId, eventType: 'mail.rm_queries', ticketId, message: 'Please resend' };
+    await expect(t.app.get(MailOutboundHandler).handle('mail.rm_queries', job)).resolves.toBeUndefined();
+    await t.app.get(MailOutboundHandler).handle('mail.rm_queries', job); // redelivery: no second attempt
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+
+    const [row] = await ds.query(
+      `SELECT status, error, conversation_ref FROM mail_messages WHERE outbox_id = $1`,
+      [outboxId],
+    );
+    expect(row).toMatchObject({ status: 'failed', conversation_ref: `${ticketNo}/RM` });
+    expect(row.error).toContain('pm.e2e@bimakavach.test');
+    const [{ n: after }] = await ds.query(
+      `SELECT count(*)::int AS n FROM mail_messages WHERE ticket_id = $1`,
+      [ticketId],
+    );
+    expect(after).toBe(before + 1);
+    const notes = await ds.query(
+      `SELECT id FROM outbox_events WHERE destination = 'notification' AND event_type = 'mail.mailbox_not_connected' AND aggregate_id = $1`,
+      [ticketId],
+    );
+    expect(notes).toHaveLength(1);
+  });
+
+  it('Resend sends a failed mail again as a new mail on the same conversation; the failed row stays (I8)', async () => {
+    const [failed] = await ds.query(
+      `SELECT id, outbox_id, conversation_ref FROM mail_messages WHERE ticket_id = $1 AND status = 'failed'`,
+      [ticketId],
+    );
+    const view = (await pm.get(`/tickets/${ticketId}/mails`).expect(200)).body.find(
+      (m: { id: string }) => m.id === failed.id,
+    );
+    expect(view).toMatchObject({ status: 'failed', resent: false, error: expect.stringContaining('pm.e2e') });
+
+    // another PM (not the owner) cannot; a mail that was sent cannot be resent
+    const otherPm = as(t, 'pm2.e2e@bimakavach.test|E2E Other PM|placement_manager');
+    await otherPm.post(`/tickets/${ticketId}/mails/${failed.id}/resend`).expect(403);
+    const [sent] = await ds.query(
+      `SELECT id FROM mail_messages WHERE ticket_id = $1 AND status = 'sent' AND direction = 'outbound' LIMIT 1`,
+      [ticketId],
+    );
+    await pm.post(`/tickets/${ticketId}/mails/${sent.id}/resend`).expect(422);
+
+    sendSpy.mockClear();
+    await pm.post(`/tickets/${ticketId}/mails/${failed.id}/resend`).expect(201);
+    await pm.post(`/tickets/${ticketId}/mails/${failed.id}/resend`).expect(409); // once per failed mail
+    const [event] = await ds.query(
+      `SELECT id, event_type, payload FROM outbox_events WHERE destination = 'mail' AND payload->>'resendOf' = $1`,
+      [failed.id],
+    );
+    expect(event.event_type).toBe('mail.rm_queries');
+    expect(event.payload).toMatchObject({ message: 'Please resend', resendOf: failed.id });
+
+    const [latestSent] = await ds.query(
+      `SELECT provider_message_id FROM mail_messages
+        WHERE conversation_ref = $1 AND provider_message_id IS NOT NULL ORDER BY at DESC LIMIT 1`,
+      [failed.conversation_ref],
+    );
+    await deliver();
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0][0]).toMatchObject({
+      idempotencyKey: event.id,
+      conversation: { ref: failed.conversation_ref, replyToMessageId: latestSent.provider_message_id },
+    });
+    const rows = await ds.query(`SELECT id, status FROM mail_messages WHERE outbox_id = ANY($1)`, [
+      [failed.outbox_id, event.id],
+    ]);
+    expect(rows.find((r: { id: string }) => r.id === failed.id).status).toBe('failed');
+    expect(rows.find((r: { id: string }) => r.id !== failed.id).status).toBe('sent');
+    const after = (await pm.get(`/tickets/${ticketId}/mails`).expect(200)).body.find(
+      (m: { id: string }) => m.id === failed.id,
+    );
+    expect(after.resent).toBe(true);
+    const audit = (await pm.get(`/tickets/${ticketId}/audit`).expect(200)).body.map(
+      (a: { event: string }) => a.event,
+    );
+    expect(audit).toContain('Mail resent');
+  });
+
+  it('a mail Gmail refuses (SEND_REJECTED) is stored failed once and notifies the owner', async () => {
+    sendSpy.mockClear();
+    sendSpy.mockRejectedValueOnce(new MailRejectedError('Gmail 400: Invalid To header'));
+    const [{ id: outboxId }] = await ds.query(
+      `INSERT INTO outbox_events (destination, event_type, aggregate_type, aggregate_id, payload)
+       VALUES ('mail', 'mail.rm_queries', 'ticket', $1, $2) RETURNING id`,
+      [ticketId, JSON.stringify({ ticketId, queryIds: [], message: 'Bad address' })],
+    );
+    const job = { outboxId, eventType: 'mail.rm_queries', ticketId, message: 'Bad address' };
+    await t.app.get(MailOutboundHandler).handle('mail.rm_queries', job);
+    await t.app.get(MailOutboundHandler).handle('mail.rm_queries', job);
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    const [row] = await ds.query(`SELECT status, error FROM mail_messages WHERE outbox_id = $1`, [outboxId]);
+    expect(row.status).toBe('failed');
+    expect(row.error).toContain('Invalid To header');
+    const notes = await ds.query(
+      `SELECT id FROM outbox_events WHERE destination = 'notification' AND event_type = 'mail.send_rejected' AND aggregate_id = $1`,
+      [ticketId],
+    );
+    expect(notes).toHaveLength(1);
   });
 
   it('lists BimaSetu messages separately (none for a manual ticket)', async () => {
