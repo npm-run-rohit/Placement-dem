@@ -66,7 +66,7 @@ export function QuotesTab({ ticket: t }: TabProps) {
       )}
       {!!quotes.length && (
         <div className="overflow-hidden rounded-xl border border-line-subtle">
-          <div className="grid grid-cols-[minmax(220px,1.3fr)_minmax(150px,1fr)_160px_120px_170px_24px] gap-3 bg-card-sunk px-3 py-2 text-xs font-semibold text-ink-2">
+          <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_140px_110px_170px_16px] gap-3 bg-card-sunk px-3 py-2 text-xs font-semibold text-ink-2">
             <span>Insurer & Contact</span>
             <span>Product</span>
             <span>Status</span>
@@ -86,7 +86,7 @@ export function QuotesTab({ ticket: t }: TabProps) {
                 )}
               >
                 <button
-                  className="grid w-full grid-cols-[minmax(220px,1.3fr)_minmax(150px,1fr)_160px_120px_170px_24px] items-center gap-3 px-3 py-3 text-left hover:bg-placement-bg"
+                  className="grid w-full grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_140px_110px_170px_16px] items-center gap-3 px-3 py-3 text-left hover:bg-placement-bg"
                   onClick={() => setOpen(isOpen ? null : q.id)}
                   aria-expanded={isOpen}
                 >
@@ -104,7 +104,7 @@ export function QuotesTab({ ticket: t }: TabProps) {
                     <StatusPill ind={pill.ind}>{pill.label}</StatusPill>
                   </span>
                   <span className="num text-meta text-ink-2">{fmtWhen(q.receivedAt)}</span>
-                  <span className="flex items-center justify-end gap-2">
+                  <span className="flex flex-col items-end gap-1">
                     <span className="num font-mono text-[12.5px] font-650">
                       {q.premium ? fmtInr(q.premium) : '-'}
                     </span>

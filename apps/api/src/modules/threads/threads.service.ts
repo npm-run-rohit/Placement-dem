@@ -32,6 +32,7 @@ import { PlacementTicket } from '../tickets/entities/placement-ticket.entity';
 import { Insurer } from '../insurers/entities/insurer.entity';
 import { InsurerBranch } from '../insurers/entities/insurer-branch.entity';
 import { Quote } from '../quotes/entities/quote.entity';
+import { hasOpenQuestion, statusAfterReply } from './thread-status';
 
 import { markRevisionHandled } from '../decisions/revision-handling';
 /** M4 selection -> M5 float -> M6/M7 thread lifecycle (hold/resume, follow-ups, restart). */
@@ -423,8 +424,13 @@ export class ThreadsService {
   ) {
     const threadId = t.id;
     if (t.pausedSince) t.heldMins += this.sla.calendar.minutesBetween(t.pausedSince, ctx.now);
+    if (hasOpenQuestion(t.status)) {
+      const quotes = await ctx.manager
+        .getRepository(Quote)
+        .find({ where: { threadId }, select: { version: true, decision: true } });
+      t.status = statusAfterReply(quotes);
+    }
     Object.assign(t, {
-      status: ThreadStatus.ACKNOWLEDGED,
       pausedSince: null,
       pauseReason: null,
       lastEventAt: ctx.now,

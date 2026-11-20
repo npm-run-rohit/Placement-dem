@@ -13,7 +13,7 @@ SELECT request_id, error, finished_at FROM copycat_requests
 ```
 
 - **Every request fails the same way** (timeout, 5xx, auth): the Copycat service, or `COPYCAT_API_KEY` in the
-  `placement-prod/external` secret. Production runs `COPYCAT_MODE=mock` until the Copycat API is agreed.
+  `placement-prod/external` secret. Production refuses `COPYCAT_MODE=mock` (it invents QCR figures), so this is the live client.
 - **Only some fail:** usually the input (an unreadable PDF). The PM can exclude that quote or upload the QCR by hand.
 
 ## Fix

@@ -147,7 +147,7 @@ export class AppStack extends Stack {
 
     // ---------- App config (shared by API, worker and the one-off migration task) ----------
     // Production defaults; config.appEnv overrides them. The API refuses to start in production with dev auth,
-    // dev simulators, local storage or the dev scanner (production-checks.ts), so these stay production-grade.
+    // dev simulators, local storage, the dev scanner or an integration stand-in (production-checks.ts).
     const appEnv: Record<string, string> = {
       NODE_ENV: 'production',
       PORT: String(API_PORT),
@@ -164,7 +164,9 @@ export class AppStack extends Stack {
       CLAMAV_PORT: String(CLAMAV_PORT),
       AUTH_MODE: 'sahayak',
       FEATURE_DEV_SIMULATORS: 'false',
-      // Integrations stay on their stand-ins until the contracts are agreed (HLD s11); flip them in appEnv.
+      // Integration stand-ins: the API refuses to start in production on them (production-checks.ts), so a
+      // deploy needs appEnv with BIMASETU_MODE=live + BIMASETU_API_URL, COPYCAT_MODE=live + COPYCAT_ENDPOINT and
+      // MAILBOX_DRIVER=email-layer + EMAIL_LAYER_URL once those integrations are built (HLD s11).
       BIMASETU_MODE: 'mock',
       COPYCAT_MODE: 'mock',
       MAILBOX_DRIVER: 'dev',

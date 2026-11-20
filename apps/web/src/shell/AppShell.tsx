@@ -15,6 +15,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useMe, useReviewCounts } from '@/api/hooks';
 import { TicketPager } from './TicketPager';
 import { NotificationBell } from './NotificationBell';
+import { useDevTools } from '@/dev/DevTools';
 import { lazyNamed, preloadAll } from '@/lib/lazy';
 
 const CreateTicketModal = lazyNamed(
@@ -40,6 +41,8 @@ const ADMIN_NAV = { to: '/admin', label: 'Admin', icon: Settings2, end: false };
  * the user card; this sidebar keeps the in-product nav only. TODO(W11): role-aware nav.
  */
 export function AppShell() {
+  // the floating dev clock chip sits bottom-right: leave room so the last card can scroll clear of it
+  const devTools = useDevTools();
   const [collapsed, setCollapsed] = useState(true);
   const [creating, setCreating] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -110,7 +113,7 @@ export function AppShell() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-shell border border-line-soft bg-white shadow-shell">
-        <div className="min-h-0 flex-1 overflow-y-auto pb-6">
+        <div className={clsx('min-h-0 flex-1 overflow-y-auto', devTools.visible ? 'pb-20' : 'pb-6')}>
           <div className="px-6 pt-4">
             <div className="flex h-12 items-center justify-between rounded-xl bg-canvas px-3 text-xs font-semibold tracking-[0.12px]">
               <div className="flex items-center gap-2">

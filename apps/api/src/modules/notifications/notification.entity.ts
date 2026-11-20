@@ -4,6 +4,10 @@ import { NotificationChannel } from '@bimaplacement/contracts';
 /** Notification log + in-app inbox (PRD 7). Delivery to email/Slack/WhatsApp via BimaSahayak. */
 @Entity('notifications')
 @Index('ix_notification_recipient', ['recipientUserId', 'readAt'])
+@Index('ux_notification_event_recipient', ['outboxId', 'recipientUserId'], {
+  unique: true,
+  where: 'outbox_id IS NOT NULL',
+})
 export class Notification {
   @PrimaryGeneratedColumn('uuid')
   id: string;

@@ -54,5 +54,11 @@ export default tseslint.config(
     files: ['apps/api/src/database/**', 'apps/api/test/**', '**/*.spec.ts', '**/scripts/**'],
     rules: { 'no-console': 'off' },
   },
+  {
+    // demo hosting helpers run as plain CommonJS Node scripts (infra/demo/start.sh)
+    files: ['infra/demo/**/*.js'],
+    languageOptions: { sourceType: 'commonjs', globals: { ...globals.node } },
+    rules: { '@typescript-eslint/no-require-imports': 'off', 'no-console': 'off' },
+  },
   prettier,
 );

@@ -6,26 +6,63 @@ const REAL_SECRET = 'k3Jx9vQ2mP8wL5tR7yN4bH6cF1dG0sZa';
 describe('productionProblems', () => {
   const base = () => configuration();
 
-  it('lists every laptop default', () => {
-    const problems = productionProblems(base());
-    expect(problems).toHaveLength(5);
-    expect(problems.join(' ')).toMatch(
-      /AUTH_MODE.*FEATURE_DEV_SIMULATORS.*STORAGE_DRIVER.*MALWARE_SCANNER.*EMAIL_LAYER_SECRET/,
-    );
-  });
-
-  it('passes a production-shaped config and requires the webhook secret in live mode', () => {
+  /** Everything production needs: real auth, storage, scanner and the three live integrations. */
+  const production = () => {
     const c = base();
     c.auth.mode = 'sahayak';
     c.features.devSimulators = false;
     c.storage.driver = 's3';
     c.malware.driver = 'clamav';
+    c.mailbox.driver = 'email-layer';
+    c.mailbox.emailLayer.url = 'https://layer';
     c.mailbox.emailLayer.secret = REAL_SECRET;
-    expect(productionProblems(c)).toEqual([]);
     c.bimasetu.mode = 'live';
-    expect(productionProblems(c)).toEqual([expect.stringMatching(/BIMASETU_WEBHOOK_SECRET/)]);
+    c.bimasetu.apiUrl = 'https://bimasetu';
     c.bimasetu.webhookSecret = 'secret';
-    expect(productionProblems(c)).toEqual([]);
+    c.copycat.mode = 'live';
+    c.copycat.endpoint = 'https://copycat';
+    c.copycat.apiKey = 'key';
+    return c;
+  };
+
+  it('lists every laptop default', () => {
+    const problems = productionProblems(base());
+    expect(problems).toHaveLength(8);
+    expect(problems.join(' ')).toMatch(
+      /AUTH_MODE.*FEATURE_DEV_SIMULATORS.*STORAGE_DRIVER.*MALWARE_SCANNER.*BIMASETU_MODE.*COPYCAT_MODE.*MAILBOX_DRIVER.*EMAIL_LAYER_SECRET/,
+    );
+  });
+
+  it('passes a production-shaped config', () => {
+    expect(productionProblems(production())).toEqual([]);
+  });
+
+  it('refuses the integration stand-ins: they would fake QCRs and drop insurer and BimaSetu mail', () => {
+    const c = production();
+    c.bimasetu.mode = 'mock';
+    c.copycat.mode = 'mock';
+    expect(productionProblems(c)).toEqual([
+      expect.stringMatching(/BIMASETU_MODE/),
+      expect.stringMatching(/COPYCAT_MODE/),
+    ]);
+    for (const driver of ['dev', 'gmail', 'graph'] as const) {
+      const m = production();
+      m.mailbox.driver = driver;
+      expect(productionProblems(m)).toEqual([expect.stringMatching(/MAILBOX_DRIVER/)]);
+    }
+  });
+
+  it('requires the live endpoints and credentials', () => {
+    const c = production();
+    c.bimasetu.apiUrl = '';
+    c.bimasetu.webhookSecret = '';
+    c.copycat.endpoint = '';
+    c.copycat.apiKey = '';
+    expect(productionProblems(c)).toEqual([
+      expect.stringMatching(/BIMASETU_API_URL/),
+      expect.stringMatching(/BIMASETU_WEBHOOK_SECRET/),
+      expect.stringMatching(/COPYCAT_ENDPOINT/),
+    ]);
   });
 
   it('requires the email layer url and secret when it is the mailbox driver', () => {

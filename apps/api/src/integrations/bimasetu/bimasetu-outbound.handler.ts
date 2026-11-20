@@ -1,4 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { AppConfig } from '../../config/configuration';
+import { DomainError } from '../../common/errors/domain-error';
 import { QueueHandler } from '../../infrastructure/messaging/queue-handler.decorator';
 import { QUEUES } from '../../infrastructure/messaging/queues';
 import type { JobHandler } from '../../infrastructure/messaging/messaging.ports';
@@ -14,10 +17,18 @@ import { BimaSetuClient } from './bimasetu.client';
 @QueueHandler(QUEUES.BIMASETU_OUTBOUND, { concurrency: 2 })
 export class BimaSetuOutboundHandler implements JobHandler {
   private readonly logger = new Logger(BimaSetuOutboundHandler.name);
-  constructor(private readonly client: BimaSetuClient) {}
+  constructor(
+    private readonly client: BimaSetuClient,
+    private readonly config: ConfigService<AppConfig, true>,
+  ) {}
 
   async handle(jobName: string, data: Record<string, unknown>): Promise<void> {
-    // TODO(W3): build envelope per type; await this.client.send(envelope); persist out-log row
-    this.logger.log(`TODO -> BimaSetu ${jobName} ${JSON.stringify(data)}`);
+    if (this.config.get('bimasetu', { infer: true }).mode === 'mock') {
+      this.logger.log(`[mock] -> BimaSetu ${jobName} ${JSON.stringify(data)}`);
+      return;
+    }
+    // TODO(W3): build envelope per type; await this.client.send(envelope); persist out-log row.
+    // Until then a live job fails, so the message waits in the retry / failed queue instead of being lost.
+    throw DomainError.notImplemented(`BimaSetu outbound ${jobName}`);
   }
 }

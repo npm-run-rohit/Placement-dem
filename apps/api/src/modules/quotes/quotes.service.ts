@@ -10,6 +10,7 @@ import { Actors, type Actor } from '../audit/actor';
 import { TicketWorkflow } from '../tickets/ticket-workflow.service';
 import { InsurerThread } from '../threads/entities/insurer-thread.entity';
 import { ThreadEvent } from '../threads/entities/thread-event.entity';
+import { hasOpenQuestion, statusForQuote } from '../threads/thread-status';
 import { SlaConfigService } from '../sla/sla-config.service';
 import { usableInsurerCount } from '../tickets/domain/status-deriver';
 import { QcrService } from '../qcr/qcr.service';
@@ -119,7 +120,8 @@ export class QuotesService {
         }),
       );
       if (thread.rfqVersion === ctx.ticket.activeRfqVersion) {
-        thread.status = ThreadStatus.QUOTE_RECEIVED;
+        // an open insurer question (and a hold for the RM) outranks the quote until we reply (FR-063/064)
+        if (!hasOpenQuestion(thread.status)) thread.status = ThreadStatus.QUOTE_RECEIVED;
         thread.lastEventAt = ctx.now;
         await ctx.manager.getRepository(InsurerThread).save(thread);
         if (ctx.ticket.stage === Stage.MARKET) ctx.moveTo(Stage.QUOTE_REVIEW, TicketCommand.QUOTE_RECEIVED);
@@ -162,6 +164,14 @@ export class QuotesService {
         throw DomainError.guard('Quote belongs to a superseded RFQ version / revision');
       if (decision === 'usable' && q.decision === QuoteDecision.CLARIFICATION)
         throw DomainError.guard('Resolve the open clarification before marking usable');
+      const thread = await ctx.manager.getRepository(InsurerThread).findOneByOrFail({ id: q.threadId });
+      // BR-054: an insurer question still open on the thread (incl. a hold for RM info, FR-063) blocks usable.
+      // A quote that arrives meanwhile keeps the ticket on the RM wait (held) rather than internal quote review:
+      // it cannot count until the question is answered.
+      if (decision === 'usable' && hasOpenQuestion(thread.status))
+        throw DomainError.guard(
+          'This thread has an open insurer question. Get the answer and reply to the insurer before marking usable',
+        );
       if (decision === 'excluded' && !note?.trim()) throw DomainError.guard('Exclusion needs a reason');
       Object.assign(q, {
         decision,
@@ -185,12 +195,7 @@ export class QuotesService {
           .execute();
       }
 
-      const thread = await ctx.manager.getRepository(InsurerThread).findOneByOrFail({ id: q.threadId });
-      thread.status = {
-        usable: ThreadStatus.QUOTE_USABLE,
-        clarification: ThreadStatus.QUOTE_CLARIFICATION,
-        excluded: ThreadStatus.QUOTE_EXCLUDED,
-      }[decision];
+      if (!hasOpenQuestion(thread.status)) thread.status = statusForQuote(q.decision);
       await ctx.manager.getRepository(InsurerThread).save(thread);
       if (decision === 'clarification') {
         await ctx.outbox({

@@ -513,7 +513,7 @@ function RowsCard({ ticket: t, qcr, editable }: { ticket: TicketDetail; qcr: Qcr
                 : 'Fill in each row from the QCR.'}
         </span>
       </div>
-      <div className="grid grid-cols-[minmax(150px,1fr)_170px_150px_160px_minmax(150px,1fr)] gap-3 bg-card-sunk px-3 py-2 text-xs font-semibold text-ink-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_150px_140px_150px_minmax(0,1fr)] gap-3 bg-card-sunk px-3 py-2 text-xs font-semibold text-ink-2">
         <span>Insurer</span>
         <span>Premium</span>
         <span>Sum insured</span>
@@ -603,7 +603,7 @@ function RowEditor({
     </div>
   );
   return (
-    <div className="grid grid-cols-[minmax(150px,1fr)_170px_150px_160px_minmax(150px,1fr)] items-start gap-3 border-t border-line-soft px-3 py-2">
+    <div className="grid grid-cols-[minmax(0,1fr)_150px_140px_150px_minmax(0,1fr)] items-start gap-3 border-t border-line-soft px-3 py-2">
       <span className="pt-1.5 text-dense font-semibold">{row.insurerName}</span>
       <div>
         {editable ? (

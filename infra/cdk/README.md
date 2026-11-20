@@ -27,11 +27,14 @@ them, and is how the integrations go live once their contracts are agreed:
   "BIMASETU_MODE": "live",
   "BIMASETU_API_URL": "…",
   "COPYCAT_MODE": "live",
-  "COPYCAT_ENDPOINT": "…"
+  "COPYCAT_ENDPOINT": "…",
+  "MAILBOX_DRIVER": "email-layer",
+  "EMAIL_LAYER_URL": "…"
 }
 ```
 
-**The API will not start yet.** It refuses to start in production with dev auth (`production-checks.ts`), and
+**The API will not start yet.** It refuses to start in production with dev auth or an integration stand-in
+(`production-checks.ts`), and
 Sahayak login isn't wired up yet (HLD s11). Until the Sahayak values above are set, deploy with
 `-c firstDeploy=true`, which keeps every service at 0 tasks.
 
@@ -83,7 +86,8 @@ Then:
 - **ClamAV is pulled from Docker Hub** (`clamav/clamav:1.4`). Mirror it to ECR if pull limits ever bite.
 - **Object lock is on but has no default retention.** It can only be switched on when the bucket is created. The
   retention period waits for the DPDP / IRDAI decision (HLD s11 #9).
-- **Integrations start on their stand-ins** (`BIMASETU_MODE`, `COPYCAT_MODE` = mock; `MAILBOX_DRIVER=dev`, which only
-  logs). Mail will go through the shared email layer.
+- **Integration defaults are stand-ins the API refuses in production** (`BIMASETU_MODE`, `COPYCAT_MODE` = mock;
+  `MAILBOX_DRIVER=dev`, which only logs). Set the live values in `appEnv` above once the BimaSetu sender, the Copycat
+  client and the email layer are in place. Mail goes through the shared email layer.
 - **Not here yet:** the reporting read replica (PLAN 4.3), the AWS messaging driver (PLAN 4.8), and X-Ray / OTel
   tracing.

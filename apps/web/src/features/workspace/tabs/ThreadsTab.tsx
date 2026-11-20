@@ -58,7 +58,7 @@ export function ThreadsTab({ ticket: t }: TabProps) {
         decline or held clock on one thread changes nothing on the others. Every POC on a thread is in To.
       </div>
       <div className="overflow-hidden rounded-xl border border-line-subtle">
-        <div className="grid grid-cols-[minmax(220px,1.4fr)_180px_130px_110px_190px] gap-3 bg-card-sunk px-3 py-2 text-xs font-semibold text-ink-2">
+        <div className="grid grid-cols-[minmax(0,1.4fr)_170px_116px_96px_150px] gap-3 bg-card-sunk px-3 py-2 text-xs font-semibold text-ink-2">
           <span>Insurer & Activity</span>
           <span>Status</span>
           <span>Date & Time</span>
@@ -112,8 +112,12 @@ function ThreadRow({
         th.held ? 'bg-t-orange-soft' : !TERMINAL.includes(th.status) && 'bg-card-alt',
       )}
     >
-      <div className="grid grid-cols-[minmax(220px,1.4fr)_180px_130px_110px_190px] items-center gap-3 px-3 py-3">
-        <button className="flex items-center gap-2 text-left" onClick={onToggle} aria-expanded={open}>
+      <div className="grid grid-cols-[minmax(0,1.4fr)_170px_116px_96px_150px] items-center gap-3 px-3 py-3">
+        <button
+          className="flex min-w-0 flex-wrap items-center gap-2 text-left"
+          onClick={onToggle}
+          aria-expanded={open}
+        >
           {open ? (
             <ChevronDown size={14} className="text-ink-2" />
           ) : (
@@ -133,11 +137,13 @@ function ThreadRow({
             </StatusPill>
           )}
         </button>
-        <span>
-          <StatusPill ind={toneToInd[meta.tone]}>
-            {meta.label}
-            {meta.sub ? ` · ${meta.sub}` : ''}
-          </StatusPill>
+        <span className="flex min-w-0 flex-col items-start gap-0.5">
+          <StatusPill ind={toneToInd[meta.tone]}>{meta.label}</StatusPill>
+          {meta.sub && (
+            <span className="pl-1 text-meta text-ink-3">
+              {meta.sub.charAt(0).toUpperCase() + meta.sub.slice(1)}
+            </span>
+          )}
         </span>
         <span className="num text-meta text-ink-2">{th.lastEventAt ? fmtWhen(th.lastEventAt) : '-'}</span>
         <span className="text-dense">

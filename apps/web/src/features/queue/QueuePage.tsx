@@ -110,8 +110,8 @@ export function QueuePage() {
     />
   );
   const cols = isHead
-    ? 'grid-cols-[110px_160px_96px_86px_minmax(150px,1fr)_minmax(170px,1fr)_130px_120px]'
-    : 'grid-cols-[110px_160px_96px_86px_minmax(150px,1fr)_minmax(170px,1fr)_130px]';
+    ? 'grid-cols-[110px_160px_96px_86px_minmax(120px,1fr)_minmax(140px,1fr)_130px_120px]'
+    : 'grid-cols-[110px_160px_96px_86px_minmax(120px,1fr)_minmax(140px,1fr)_130px]';
 
   return (
     <div className="px-6 py-6">

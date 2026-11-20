@@ -6,6 +6,7 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 
  */
 @Entity('idempotency_keys')
 @Index('ux_idempotency_user_key', ['userId', 'key'], { unique: true })
+@Index('ix_idempotency_created', ['createdAt'])
 export class IdempotencyKey {
   @PrimaryGeneratedColumn('uuid')
   id: string;
