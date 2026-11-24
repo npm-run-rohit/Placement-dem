@@ -18,6 +18,7 @@ npm run db:up                       # docker: postgres, redis, mailpit (UI http:
 npm run build:contracts             # after any change in packages/contracts
 cp apps/api/.env.example apps/api/.env
 npm run migration:run && npm run seed
+npm run seed:masters -- <path/to/BimaPlacement_Masters.xlsx> [--dry-run]   # real insurer master, users, RMs, holidays
 npm run seed:fixtures               # optional, dev only: the prototype's 17 sample tickets (empty DB)
 npm run dev:api      # :4000  (Swagger /api/v1/docs)
 npm run dev:worker   # queue handlers, outbox relay, SLA sweeper

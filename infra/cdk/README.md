@@ -14,7 +14,10 @@ config in `cdk.json`, placeholder secrets and Jest assertion tests. PLAN 0.6 (in
 
 **One image for three jobs.** `apps/api/Dockerfile` is built from the repo root. The API runs `node dist/main.js`,
 the worker `node dist/worker.js`, and migrations `npm run db:deploy` (TypeORM migrations, then the idempotent PRD
-master seed).
+master seed). The business masters (insurers, branches, POCs, appetite, Placement users, RMs, holidays) are loaded
+once, and again whenever the workbook changes, with `node dist/database/seeds/seed-masters.js <workbook.xlsx>`
+(`--dry-run` first). The workbook holds insurer contact details, so it is never baked into the image; run the
+command against the prod database from a machine with DB access, or copy the file into a one-off task.
 
 **App settings.** Production defaults are in `lib/app-stack.ts`. `envs.prod.appEnv` in `cdk.json` overrides any of
 them, and is how the integrations go live once their contracts are agreed:

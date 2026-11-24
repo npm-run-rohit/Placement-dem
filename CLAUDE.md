@@ -13,6 +13,7 @@ npm run db:up                                 # postgres 16 + redis 7 + mailpit 
 npm run build:contracts                       # after ANY change in packages/contracts
 cp apps/api/.env.example apps/api/.env        # AUTH_MODE=dev, mocks for BimaSetu/Copycat/mailbox
 npm run migration:run && npm run seed         # schema + PRD master defaults
+npm run seed:masters -- <BimaPlacement_Masters.xlsx> [--dry-run]  # real masters: insurers, branches, POCs, appetite, users, RMs, holidays (prod too)
 npm run seed:fixtures                         # DEV ONLY: mock insurers + the prototype's 17 tickets (PLC-1001..1017 = prototype 1024..1040), empty DB
 npm run dev:api                               # http://localhost:4000/api/v1 (Swagger: /api/v1/docs)
 npm run dev:worker                            # queue handlers, outbox relay, SLA sweeper

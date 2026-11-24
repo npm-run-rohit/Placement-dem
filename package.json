@@ -27,7 +27,8 @@
     "migration:generate": "npm run migration:generate -w @bimaplacement/api",
     "migration:run": "npm run migration:run -w @bimaplacement/api",
     "seed": "npm run seed -w @bimaplacement/api",
-    "seed:fixtures": "npm run seed:fixtures -w @bimaplacement/api"
+    "seed:fixtures": "npm run seed:fixtures -w @bimaplacement/api",
+    "seed:masters": "npm run seed:masters -w @bimaplacement/api --"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

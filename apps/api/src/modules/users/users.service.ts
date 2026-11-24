@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Role } from '@bimaplacement/contracts';
 import { User } from './user.entity';
 import { DomainError } from '../../common/errors/domain-error';
+import { PENDING_SAHAYAK_PREFIX } from './users.constants';
 
 @Injectable()
 export class UsersService {
@@ -18,6 +19,14 @@ export class UsersService {
     avatarUrl?: string | null;
   }) {
     let user = await this.repo.findOne({ where: { sahayakUserId: input.sahayakUserId } });
+    // first login of a user loaded by the masters import: claim that row so tickets already assigned stay theirs
+    if (!user)
+      user = await this.repo
+        .createQueryBuilder('u')
+        .where('lower(u.email) = lower(:email)', { email: input.email })
+        .andWhere('u.sahayak_user_id LIKE :pending', { pending: `${PENDING_SAHAYAK_PREFIX}%` })
+        .getOne();
+    if (user?.sahayakUserId.startsWith(PENDING_SAHAYAK_PREFIX)) user.sahayakUserId = input.sahayakUserId;
     if (!user) user = this.repo.create({ ...input, mailboxAddress: input.email });
     else
       Object.assign(user, {

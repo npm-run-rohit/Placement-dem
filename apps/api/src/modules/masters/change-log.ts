@@ -3,6 +3,7 @@ import type { MasterChangeView } from '@bimaplacement/contracts';
 import type { AuthUser } from '../../common/auth/auth.types';
 import { MasterChangeLog } from '../insurers/entities/master-change-log.entity';
 import { User } from '../users/user.entity';
+import { IMPORT_ACTOR_ID, IMPORT_ACTOR_NAME } from '../users/users.constants';
 
 /** One before/after row in master_change_log (FR-148), written in the same transaction as the edit. */
 export function recordChange(
@@ -45,7 +46,10 @@ export async function changeViews(
     field: r.field,
     before: r.before,
     after: r.after,
-    changedBy: users.find((u) => u.id === r.changedBy)?.name ?? 'Unknown',
+    changedBy:
+      r.changedBy === IMPORT_ACTOR_ID
+        ? IMPORT_ACTOR_NAME
+        : (users.find((u) => u.id === r.changedBy)?.name ?? 'Unknown'),
     changedAt: r.changedAt.toISOString(),
   }));
 }

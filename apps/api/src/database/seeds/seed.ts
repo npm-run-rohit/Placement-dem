@@ -18,7 +18,7 @@ import {
 /**
  * Seeds masters from the PRD defaults (Appendix C "Have" items). Idempotent (upserts).
  * Real data still pending from the Placement Head (insurer appetite grid, holiday list, users, RMs,
- * final template wording) - import BimaPlacement_Masters_v3.xlsx via a TODO importer (PLAN.md W2).
+ * final template wording); the rest of the business masters workbook is loaded by seed-masters.ts.
  * Dev fixtures (insurers, demo tickets) live in ./fixtures and are only loaded with SEED_FIXTURES=true.
  */
 async function main() {
