@@ -16,7 +16,14 @@ export interface EligibilityInsurer {
     id: string;
     name: string;
     status: BranchStatus;
-    pocs: Array<{ id: string; name: string; email: string; productGroup: ProductGroup; active: boolean }>;
+    pocs: Array<{
+      id: string;
+      name: string;
+      email: string;
+      ccEmails: string[];
+      productGroup: ProductGroup;
+      active: boolean;
+    }>;
   }>;
 }
 
@@ -25,8 +32,22 @@ export interface SelectableEntity {
   branchId: string;
   label: string; // "ICICI Lombard - Mumbai" or just the insurer name
   pocs: Array<{ pocId: string; name: string; email: string }>;
+  /** CC addresses of those POCs (Appendix F "CC"), once each, never someone already in To */
+  ccEmails: string[];
   inAppetite: boolean; // chip only, never blocks (FR-210)
   lock: EntityLockReason | null;
+}
+
+/** The POCs' CC addresses, case-insensitively unique, without anyone who is already a POC (in To). */
+function ccFor(pocs: Array<{ email: string; ccEmails: string[] }>): string[] {
+  const seen = new Set(pocs.map((p) => p.email.toLowerCase()));
+  const out: string[] = [];
+  for (const cc of pocs.flatMap((p) => p.ccEmails ?? []))
+    if (!seen.has(cc.toLowerCase())) {
+      seen.add(cc.toLowerCase());
+      out.push(cc);
+    }
+  return out;
 }
 
 /**
@@ -67,6 +88,7 @@ export function computeSelectableEntities(
         branchId: br.id,
         label: br.name ? `${ins.name} - ${br.name}` : ins.name,
         pocs: pocs.map((p) => ({ pocId: p.id, name: p.name, email: p.email })),
+        ccEmails: ccFor(pocs),
         inAppetite: ins.appetite.includes(ticket.productType),
         lock,
       });

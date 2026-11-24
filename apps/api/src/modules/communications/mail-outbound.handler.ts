@@ -36,6 +36,8 @@ type Job = {
 };
 type Draft = {
   to: string[];
+  /** insurer thread mail: the POCs' CC addresses (Appendix F); everything else: none */
+  cc?: string[];
   threadId: string | null;
   templateId: string | null;
   subject: string;
@@ -113,7 +115,7 @@ export class MailOutboundHandler implements JobHandler {
       templateId: draft.templateId,
       fromAddress: fromMailbox,
       toAddresses: draft.to,
-      ccAddresses: [],
+      ccAddresses: draft.cc ?? [],
       subject: draft.subject,
       bodyHtml: html(draft.body),
       attachmentDocumentIds: draft.attachments.map((d) => d.id),
@@ -127,6 +129,7 @@ export class MailOutboundHandler implements JobHandler {
       sent = await this.mailbox.send({
         fromMailbox,
         to: draft.to,
+        ...(draft.cc?.length ? { cc: draft.cc } : {}),
         subject: draft.subject,
         html: html(draft.body),
         text: draft.body,
@@ -214,7 +217,12 @@ export class MailOutboundHandler implements JobHandler {
       const vars = {
         ...base,
         ThreadID: th.threadRef,
-        POC: th.pocs.map((p) => p.name.split(' ')[0]).join(', '),
+        // POCs loaded from the masters workbook may have no name (email only); greet the named ones
+        POC:
+          th.pocs
+            .map((p) => p.name.trim().split(' ')[0])
+            .filter(Boolean)
+            .join(', ') || 'Team',
         ExpectedResponseDate: fmtDate(
           th.floatedAt ? this.sla.calendar.addMinutes(th.floatedAt, th.targetMins) : null,
         ),
@@ -226,6 +234,7 @@ export class MailOutboundHandler implements JobHandler {
       if (type === 'mail.insurer_reply' || type === 'mail.quote_clarification') {
         return {
           to,
+          cc: th.ccEmails,
           threadId: th.id,
           templateId: null,
           subject: `Re: ${ref} RFQ - ${t.businessName} - ${product}`,
@@ -244,6 +253,7 @@ export class MailOutboundHandler implements JobHandler {
       const attachRfq = ['INS-T01', 'INS-T04', 'INS-T06'].includes(id);
       return {
         to,
+        cc: th.ccEmails,
         threadId: th.id,
         templateId: id,
         subject: renderTemplate(template.subjectTemplate, vars),

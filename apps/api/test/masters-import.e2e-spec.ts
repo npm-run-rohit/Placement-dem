@@ -76,14 +76,13 @@ describe('Masters import', () => {
 
     const master = (await head.get('/insurers/master').expect(200)).body as Array<{
       code: string;
+      brokingCode: string | null;
       appetite: string[];
       branch: { name: string };
       pocs: Record<string, Array<{ name: string; email: string; ccEmails?: string[] }>>;
     }>;
     const alpha = master.find((r) => r.code === 'import-alpha-general');
-    expect(alpha).toMatchObject({ appetite: ['GMC'], branch: { name: 'Indore' } });
-    const [code] = await ds.query(`SELECT broking_code FROM insurers WHERE code = 'import-alpha-general'`);
-    expect(code.broking_code).toBe('10092548'); // not on the Insurer Master view yet
+    expect(alpha).toMatchObject({ brokingCode: '10092548', appetite: ['GMC'], branch: { name: 'Indore' } });
     expect(alpha?.pocs.EB.map((p) => p.email)).toEqual(['asha@import-alpha.example.test']);
     expect(master.find((r) => r.code === 'import-beta-life')?.branch.name).toBe('');
 

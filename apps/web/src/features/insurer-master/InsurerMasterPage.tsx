@@ -105,6 +105,11 @@ export function InsurerMasterPage() {
                     {r.logoUrl && <InsurerMark name={r.name} logoUrl={r.logoUrl} size={20} />}
                     <span className="text-[12.5px] font-semibold text-ink">{r.name}</span>
                   </div>
+                  {r.brokingCode && (
+                    <div className="mt-0.5 text-[11px] tabular-nums text-ink-2">
+                      Broking code {r.brokingCode}
+                    </div>
+                  )}
                   {r.note && <div className="mt-0.5 text-[11px] text-ink-3">{r.note}</div>}
                 </td>
                 <td className="px-3 py-3">
@@ -188,6 +193,7 @@ function parsePocs(text: string): Array<{ name: string; email: string }> {
 function EditDrawer({ row, onClose }: { row: InsurerMasterRow | null; onClose: () => void }) {
   const qc = useQueryClient();
   const [name, setName] = useState(row?.name ?? '');
+  const [brokingCode, setBrokingCode] = useState(row?.brokingCode ?? '');
   const [sectors, setSectors] = useState(row?.sectors ?? '');
   const [note, setNote] = useState(row?.note ?? '');
   const [status, setStatus] = useState(row?.status ?? 'Active');
@@ -204,6 +210,7 @@ function EditDrawer({ row, onClose }: { row: InsurerMasterRow | null; onClose: (
     mutationFn: async () => {
       const fields = {
         name: name.trim(),
+        brokingCode: brokingCode.trim() || null,
         sectors: sectors.trim() || null,
         note: note.trim() || null,
         status,
@@ -251,6 +258,10 @@ function EditDrawer({ row, onClose }: { row: InsurerMasterRow | null; onClose: (
         <div>
           <label className={label}>Insurer name</label>
           <input className={input} value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div>
+          <label className={label}>Broking code</label>
+          <input className={input} value={brokingCode} onChange={(e) => setBrokingCode(e.target.value)} />
         </div>
         <div>
           <label className={label}>Sectors written</label>

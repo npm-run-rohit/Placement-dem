@@ -19,6 +19,7 @@ import type { AuthUser } from '../../common/auth/auth.types';
 import { Actors, type Actor } from '../audit/actor';
 import { TicketWorkflow, type WorkflowContext } from '../tickets/ticket-workflow.service';
 import { InsurersService } from '../insurers/insurers.service';
+import type { SelectableEntity } from '../insurers/eligibility';
 import { SlaConfigService } from '../sla/sla-config.service';
 import { RfqVersion } from '../rfq/entities/rfq-version.entity';
 import { InsurerThread } from './entities/insurer-thread.entity';
@@ -200,12 +201,7 @@ export class ThreadsService {
 
   private async createThread(
     ctx: WorkflowContext,
-    e: {
-      insurerId: string;
-      branchId: string;
-      label: string;
-      pocs: Array<{ pocId: string; name: string; email: string }>;
-    },
+    e: Pick<SelectableEntity, 'insurerId' | 'branchId' | 'label' | 'pocs' | 'ccEmails'>,
     rfq: RfqVersion,
     afterFloat: boolean,
   ) {
@@ -219,6 +215,7 @@ export class ThreadsService {
         insurerId: e.insurerId,
         branchId: e.branchId,
         pocs: e.pocs,
+        ccEmails: e.ccEmails, // copied on every mail of the thread
         status: ThreadStatus.RFQ_SENT,
         addedAfterFloat: afterFloat,
         floatedAt: ctx.now,
@@ -232,7 +229,7 @@ export class ThreadsService {
       kind: 'rfq_sent',
       actorType: ctx.actor.type,
       actorId: ctx.actor.id,
-      text: `RFQ V${rfq.version} sent to ${e.label} · To: ${e.pocs.map((p) => p.name).join(', ')}`,
+      text: `RFQ V${rfq.version} sent to ${e.label} · To: ${e.pocs.map((p) => p.name || p.email).join(', ')}${e.ccEmails.length ? ` · CC: ${e.ccEmails.join(', ')}` : ''}`,
     });
     // INS-T01 from the assigned PM mailbox; worker renders + sends + writes mail_messages (FR-049..053)
     await ctx.outbox({
@@ -252,12 +249,7 @@ export class ThreadsService {
   /** FR-219 / FR-125: post-float addition creates a new independent thread and re-sends the RFQ. */
   private async addAfterFloat(
     ctx: WorkflowContext,
-    entity: {
-      insurerId: string;
-      branchId: string;
-      label: string;
-      pocs: Array<{ pocId: string; name: string; email: string }>;
-    },
+    entity: Pick<SelectableEntity, 'insurerId' | 'branchId' | 'label' | 'pocs' | 'ccEmails'>,
   ) {
     const existing = await ctx.manager.getRepository(InsurerThread).count({
       where: {

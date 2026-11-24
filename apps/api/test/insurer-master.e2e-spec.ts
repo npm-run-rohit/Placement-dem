@@ -25,7 +25,12 @@ describe('Insurer Master', () => {
     await pm.post('/insurers', { name: 'E2E Master General' }).expect(403);
     const ins = (
       await head
-        .post('/insurers', { name: 'E2E Master General', appetite: ['GMC', 'CGL'], sectors: 'Manufacturing' })
+        .post('/insurers', {
+          name: 'E2E Master General',
+          appetite: ['GMC', 'CGL'],
+          sectors: 'Manufacturing',
+          brokingCode: 'BRC0000631',
+        })
         .expect(201)
     ).body;
     insurerId = ins.id;
@@ -35,12 +40,28 @@ describe('Insurer Master', () => {
     const [r] = await row('e2e-master-general');
     expect(r).toMatchObject({
       name: 'E2E Master General',
+      brokingCode: 'BRC0000631',
       status: 'Active',
       appetite: ['GMC', 'CGL'],
       branch: { name: '', status: 'Active' },
       pocs: { EB: [], Liability: [], 'P&C': [] },
     });
     branchId = r.branch.id;
+  });
+
+  it('shows and edits the broking code, logging the change (Appendix C #06)', async () => {
+    await head.patch(`/insurers/${insurerId}`, { brokingCode: 'BRC0000632' }).expect(200);
+    const [r] = await row('e2e-master-general');
+    expect(r.brokingCode).toBe('BRC0000632');
+    const log = (await head.get('/insurers/change-log').expect(200)).body as Array<{
+      field: string;
+      before: unknown;
+      after: unknown;
+    }>;
+    expect(log.find((l) => l.field === 'brokingCode')).toMatchObject({
+      before: 'BRC0000631',
+      after: 'BRC0000632',
+    });
   });
 
   it('saves branch fields and POCs per product group from the edit drawer, logging each change (FR-161, FR-162)', async () => {

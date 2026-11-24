@@ -12,6 +12,7 @@ const poc = (g: ProductGroup) => ({
   id: `p-${g}`,
   name: 'POC',
   email: 'poc@x.com',
+  ccEmails: [] as string[],
   productGroup: g,
   active: true,
 });
@@ -76,5 +77,38 @@ describe('insurer eligibility', () => {
       hasIncumbentMandate: true,
     });
     expect(ok.find((x) => x.branchId === 'b1')?.lock).toBeNull();
+  });
+
+  it("copies the POCs' CC addresses once, leaving out anyone already in To", () => {
+    const withCc: EligibilityInsurer[] = [
+      {
+        ...insurers[0],
+        branches: [
+          {
+            id: 'b1',
+            name: 'Mumbai',
+            status: BranchStatus.ACTIVE,
+            pocs: [
+              {
+                ...poc(ProductGroup.EB),
+                id: 'p1',
+                email: 'asha@x.com',
+                ccEmails: ['Boss@x.com', 'vik@x.com'],
+              },
+              {
+                ...poc(ProductGroup.EB),
+                id: 'p2',
+                email: 'vik@x.com',
+                ccEmails: ['boss@x.com', 'desk@x.com'],
+              },
+              { ...poc(ProductGroup.LIABILITY), id: 'p3', email: 'lia@x.com', ccEmails: ['liab-cc@x.com'] },
+            ],
+          },
+        ],
+      },
+    ];
+    const [e] = computeSelectableEntities(withCc, ticket);
+    expect(e.pocs.map((p) => p.email)).toEqual(['asha@x.com', 'vik@x.com']);
+    expect(e.ccEmails).toEqual(['Boss@x.com', 'desk@x.com']);
   });
 });

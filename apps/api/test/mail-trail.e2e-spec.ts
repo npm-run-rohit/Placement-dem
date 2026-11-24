@@ -61,7 +61,7 @@ describe('Mail Trail', () => {
       [insurerId],
     );
     await ds.query(
-      `INSERT INTO insurer_pocs (branch_id, product_group, name, email, row_version) VALUES ($1, 'EB', 'Asha Rao', 'asha@insurer.example.test', 1), ($1, 'EB', 'Vikram Shah', 'vikram@insurer.example.test', 1)`,
+      `INSERT INTO insurer_pocs (branch_id, product_group, name, email, cc_emails, row_version) VALUES ($1, 'EB', 'Asha Rao', 'asha@insurer.example.test', '{boss@insurer.example.test,vikram@insurer.example.test}', 1), ($1, 'EB', 'Vikram Shah', 'vikram@insurer.example.test', '{}', 1)`,
       [branchId],
     );
 
@@ -124,6 +124,9 @@ describe('Mail Trail', () => {
       rfqLinkInBody: true,
     });
     expect(float.to.sort()).toEqual(['asha@insurer.example.test', 'vikram@insurer.example.test']);
+    expect(float.cc).toEqual(['boss@insurer.example.test']); // POC CC copied; a POC already in To is not
+    const sentFloat = sendSpy.mock.calls.map(([m]) => m).find((m) => m.subject === float.subject);
+    expect(sentFloat.cc).toEqual(['boss@insurer.example.test']);
     expect(float.subject).toBe(
       `[${ticketNo} | TH-01] RFQ - E2E Mail Trail Pvt Ltd - ${PRODUCT_TYPES_SEED.find((p) => p.code === 'GMC')!.label}`,
     );
@@ -168,6 +171,7 @@ describe('Mail Trail', () => {
     await pm.post(`/tickets/${ticketId}/threads/${thread.id}/follow-up`, {}).expect(201);
     await deliver();
     expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0][0].cc).toEqual(['boss@insurer.example.test']); // every thread mail, not only the float
     expect(sendSpy.mock.calls[0][0].conversation).toEqual({
       ref: `${ticketNo}/TH-01`,
       replyToMessageId: floatRow.provider_message_id,

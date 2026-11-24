@@ -378,6 +378,8 @@ export interface InsurerMasterRow {
   insurerId: string;
   code: string;
   name: string;
+  /** BimaKavach's broking code with this insurer (Appendix C #06); null where none is given */
+  brokingCode: string | null;
   logoUrl: string | null;
   sectors: string | null;
   note: string | null;
